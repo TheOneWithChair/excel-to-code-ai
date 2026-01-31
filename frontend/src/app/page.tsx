@@ -61,78 +61,102 @@ export default function Home() {
       </section>
 
       {/* Spreadsheet Preview Section */}
-      <section className="container mx-auto px-6 py-12">
-        <div className="text-center mb-8">
-          <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900">How It Works</h2>
-          <p className="text-gray-600 max-w-2xl mx-auto">Define your project structure in Excel and let the AI generate your entire codebase</p>
+      <section className="container mx-auto px-6 py-16">
+        <div className="text-center mb-10">
+          <h2 className="text-4xl md:text-5xl font-bold mb-4 text-gray-900">How It Works</h2>
+          <p className="text-gray-600 text-lg max-w-2xl mx-auto">Define your project structure in Excel and let the AI generate your entire codebase</p>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden">
-          <div className="p-8">
-            <div className="flex items-center space-x-4 mb-6">
-              <div className="flex space-x-2">
-                <div className="w-3 h-3 rounded-full bg-red-400"></div>
-                <div className="w-3 h-3 rounded-full bg-yellow-400"></div>
-                <div className="w-3 h-3 rounded-full bg-green-400"></div>
-              </div>
-              <span className="text-sm text-gray-500">project-schema.xlsx</span>
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden max-w-6xl mx-auto">
+          {/* Mock Excel Window Header */}
+          <div className="bg-gray-100 px-4 py-2 flex items-center gap-2 border-b border-gray-200">
+            <div className="flex gap-1.5">
+              <div className="w-3 h-3 rounded-full bg-red-400"></div>
+              <div className="w-3 h-3 rounded-full bg-yellow-400"></div>
+              <div className="w-3 h-3 rounded-full bg-green-400"></div>
             </div>
+            <span className="text-sm text-gray-600 font-mono ml-2">project-schema.xlsx</span>
+          </div>
 
-            {/* Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">Entity</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">Fields</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">Type</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">Validation</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">Relations</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="border-b border-gray-100">
-                    <td className="py-3 px-4 font-medium">User</td>
-                    <td className="py-3 px-4">email</td>
-                    <td className="py-3 px-4"><span className="bg-purple-100 text-purple-700 px-2 py-1 rounded text-xs font-mono">String</span></td>
-                    <td className="py-3 px-4">Email, Required</td>
-                    <td className="py-3 px-4">-</td>
-                  </tr>
-                  <tr className="border-b border-gray-100">
-                    <td className="py-3 px-4 font-medium">User</td>
-                    <td className="py-3 px-4">password</td>
-                    <td className="py-3 px-4"><span className="bg-purple-100 text-purple-700 px-2 py-1 rounded text-xs font-mono">String</span></td>
-                    <td className="py-3 px-4">Min 8 chars</td>
-                    <td className="py-3 px-4">-</td>
-                  </tr>
-                  <tr className="border-b border-gray-100">
-                    <td className="py-3 px-4 font-medium">Project</td>
-                    <td className="py-3 px-4">name</td>
-                    <td className="py-3 px-4"><span className="bg-purple-100 text-purple-700 px-2 py-1 rounded text-xs font-mono">String</span></td>
-                    <td className="py-3 px-4">Required</td>
-                    <td className="py-3 px-4">-</td>
-                  </tr>
-                  <tr className="border-b border-gray-100">
-                    <td className="py-3 px-4 font-medium">Project</td>
-                    <td className="py-3 px-4">owner_id</td>
-                    <td className="py-3 px-4"><span className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-mono">Foreign Key</span></td>
-                    <td className="py-3 px-4">Required</td>
-                    <td className="py-3 px-4">User.id</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+          {/* Excel Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Entity</th>
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Fields</th>
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Type</th>
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Validation</th>
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Relations</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                <tr className="hover:bg-gray-50">
+                  <td className="px-6 py-4 text-sm text-gray-900">User</td>
+                  <td className="px-6 py-4 text-sm text-gray-900">email</td>
+                  <td className="px-6 py-4">
+                    <span className="inline-flex px-2 py-1 text-xs font-mono font-medium rounded-md bg-purple-100 text-purple-700">
+                      String
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-900">Email, Required</td>
+                  <td className="px-6 py-4 text-sm text-gray-500">-</td>
+                </tr>
+                <tr className="hover:bg-gray-50">
+                  <td className="px-6 py-4 text-sm text-gray-900">User</td>
+                  <td className="px-6 py-4 text-sm text-gray-900">password</td>
+                  <td className="px-6 py-4">
+                    <span className="inline-flex px-2 py-1 text-xs font-mono font-medium rounded-md bg-purple-100 text-purple-700">
+                      String
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-900">Min 8 chars</td>
+                  <td className="px-6 py-4 text-sm text-gray-500">-</td>
+                </tr>
+                <tr className="hover:bg-gray-50">
+                  <td className="px-6 py-4 text-sm text-gray-900">Project</td>
+                  <td className="px-6 py-4 text-sm text-gray-900">name</td>
+                  <td className="px-6 py-4">
+                    <span className="inline-flex px-2 py-1 text-xs font-mono font-medium rounded-md bg-purple-100 text-purple-700">
+                      String
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-900">Required</td>
+                  <td className="px-6 py-4 text-sm text-gray-500">-</td>
+                </tr>
+                <tr className="hover:bg-gray-50">
+                  <td className="px-6 py-4 text-sm text-gray-900">Project</td>
+                  <td className="px-6 py-4 text-sm text-gray-900">owner_id</td>
+                  <td className="px-6 py-4">
+                    <span className="inline-flex px-2 py-1 text-xs font-mono font-medium rounded-md bg-green-100 text-green-700">
+                      Foreign Key
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-900">Required</td>
+                  <td className="px-6 py-4 text-sm text-gray-900">User.id</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
-            <div className="mt-6 flex items-center justify-between bg-blue-50 p-4 rounded-lg">
-              <div className="flex items-center gap-3">
-                <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          {/* Footer with AI message */}
+          <div className="bg-blue-50 border-t border-blue-200 px-6 py-4">
+            <div className="flex items-center gap-3">
+              <div className="shrink-0">
+                <svg className="w-6 h-6 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M11 3a1 1 0 10-2 0v1a1 1 0 102 0V3zM15.657 5.757a1 1 0 00-1.414-1.414l-.707.707a1 1 0 001.414 1.414l.707-.707zM18 10a1 1 0 01-1 1h-1a1 1 0 110-2h1a1 1 0 011 1zM5.05 6.464A1 1 0 106.464 5.05l-.707-.707a1 1 0 00-1.414 1.414l.707.707zM5 10a1 1 0 01-1 1H3a1 1 0 110-2h1a1 1 0 011 1zM8 16v-1h4v1a2 2 0 11-4 0zM12 14c.015-.34.208-.646.477-.859a4 4 0 10-4.954 0c.27.213.462.519.476.859h4.002z" />
                 </svg>
-                <span className="text-sm text-gray-700 font-medium">AI generates complete project structure, models, APIs, and migrations</span>
               </div>
-              <svg className="w-5 h-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-blue-900">
+                  AI generates complete project structure, models, APIs, and migrations
+                </p>
+              </div>
+              <div className="shrink-0">
+                <svg className="w-5 h-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+              </div>
             </div>
           </div>
         </div>
