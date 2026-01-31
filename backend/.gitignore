@@ -19,3 +19,8 @@ htmlcov/
 # Storage directory for uploaded files
 storage/uploads/*/
 !storage/uploads/.gitkeep
+
+# Storage directory for generated projects
+storage/generated_projects/*/
+!storage/generated_projects/.gitkeep
+!storage/generated_projects/README.md

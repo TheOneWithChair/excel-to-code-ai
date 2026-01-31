@@ -2,14 +2,16 @@
 Project routes for the AutoPilot project generator.
 Handles project creation and management.
 """
-from fastapi import APIRouter, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, HTTPException, status, UploadFile, File, BackgroundTasks
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
+from pathlib import Path
 import uuid
 
 from app.db.models import Project, Project_Pydantic
-from app.services import storage_service, excel_parser, spec_service
+from app.services import storage_service, excel_parser, spec_service, project_generator
+from app.utils import build_file_tree, file_reader
 
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -214,3 +216,173 @@ async def upload_specs(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to upload and parse specifications: {str(e)}"
         )
+
+
+class GenerateProjectResponse(BaseModel):
+    """Response model for project generation."""
+    message: str
+    project_id: uuid.UUID
+    status: str
+
+
+@router.post("/{project_id}/generate", response_model=GenerateProjectResponse)
+async def generate_project(
+    project_id: uuid.UUID,
+    background_tasks: BackgroundTasks
+):
+    """
+    Generate project files from specifications.
+    Runs generation as a background task.
+    
+    Args:
+        project_id: UUID of the project
+        background_tasks: FastAPI background tasks
+        
+    Returns:
+        Confirmation that generation has started
+    """
+    # Validate project exists
+    project = await Project.filter(id=project_id).first()
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Project with id {project_id} not found"
+        )
+    
+    # Check if project has specifications
+    from app.db.models import ProjectSpec
+    spec = await ProjectSpec.filter(project_id=project_id).first()
+    if not spec:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Project specifications not found. Please upload Excel files first."
+        )
+    
+    # Check if project is in valid state for generation
+    if project.status == "GENERATING":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Project generation is already in progress"
+        )
+    
+    if project.status == "DONE":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Project has already been generated"
+        )
+    
+    try:
+        # Add generation task to background
+        background_tasks.add_task(
+            project_generator.generate_project,
+            project_id
+        )
+        
+        return GenerateProjectResponse(
+            message="Project generation started",
+            project_id=project_id,
+            status="GENERATING"
+        )
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to start project generation: {str(e)}"
+        )
+
+
+@router.get("/{project_id}/files")
+async def get_project_files(project_id: uuid.UUID) -> List[Dict[str, Any]]:
+    """
+    Get file tree structure for a generated project.
+    
+    Args:
+        project_id: UUID of the project
+        
+    Returns:
+        List of file tree nodes representing the project structure
+    """
+    # Validate project exists
+    project = await Project.filter(id=project_id).first()
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Project with id {project_id} not found"
+        )
+    
+    # Get project directory path
+    project_path = Path("storage/generated_projects") / str(project_id)
+    
+    # Build and return file tree
+    try:
+        file_tree = build_file_tree(project_path)
+        return file_tree
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to read project files: {str(e)}"
+        )
+
+
+class FileContentResponse(BaseModel):
+    """Response model for file content."""
+    path: str
+    content: str
+
+
+@router.get("/{project_id}/files/content", response_model=FileContentResponse)
+async def get_file_content(project_id: uuid.UUID, path: str):
+    """
+    Get content of a specific file in a generated project.
+    
+    Args:
+        project_id: UUID of the project
+        path: Relative path to the file (e.g., "backend/main.py")
+        
+    Returns:
+        File path and content
+    """
+    # Validate project exists
+    project = await Project.filter(id=project_id).first()
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Project with id {project_id} not found"
+        )
+    
+    # Validate path
+    is_valid, error_msg = file_reader.validate_path(path)
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_msg
+        )
+    
+    # Get project directory path
+    base_dir = Path("storage/generated_projects") / str(project_id)
+    
+    # Read file content
+    success, content, error_msg = file_reader.safe_read_file(base_dir, path)
+    
+    if not success:
+        # Determine appropriate status code
+        if error_msg and "not found" in error_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_msg
+            )
+        elif error_msg and ("denied" in error_msg.lower() or "not allowed" in error_msg.lower()):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=error_msg
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=error_msg or "Failed to read file"
+            )
+    
+    return FileContentResponse(
+        path=path,
+        content=content
+    )
