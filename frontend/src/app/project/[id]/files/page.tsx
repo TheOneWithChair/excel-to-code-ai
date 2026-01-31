@@ -473,7 +473,7 @@ export default function ProjectFilesPage({ params }: ProjectFilesPageProps) {
                             fileName={selectedFile?.name || null}
                             filePath={selectedFile?.path || null}
                             content={selectedFile?.content || null}
-                            className="min-h-[500px]"
+                            className="min-h-125"
                         />
 
                         {/* Optimization Panel */}

@@ -117,7 +117,7 @@ export default function OptimizationPanel({
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                         <div className="flex gap-2">
                             <svg
-                                className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5"
+                                className="w-4 h-4 text-blue-600 shrink-0 mt-0.5"
                                 fill="currentColor"
                                 viewBox="0 0 20 20"
                             >

@@ -172,7 +172,7 @@ export default function ProjectStatusPage({ params }: ProjectStatusPageProps) {
                 {!isReady && (
                     <Card className="mb-6">
                         <div className="flex items-center gap-4">
-                            <div className="flex-shrink-0">
+                            <div className="shrink-0">
                                 <svg
                                     className="animate-spin h-8 w-8 text-blue-600"
                                     xmlns="http://www.w3.org/2000/svg"
@@ -210,7 +210,7 @@ export default function ProjectStatusPage({ params }: ProjectStatusPageProps) {
                 {isReady && (
                     <Card className="mb-6 bg-green-50 border-green-200">
                         <div className="flex items-center gap-4">
-                            <div className="flex-shrink-0">
+                            <div className="shrink-0">
                                 <svg
                                     className="h-8 w-8 text-green-600"
                                     fill="currentColor"

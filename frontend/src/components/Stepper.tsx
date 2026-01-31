@@ -22,7 +22,6 @@ export default function Stepper({ steps, currentStep, className = '' }: StepperP
                 {steps.map((step, index) => {
                     const isCompleted = index < currentIndex;
                     const isCurrent = step.id === currentStep;
-                    const isPending = index > currentIndex;
 
                     return (
                         <React.Fragment key={step.id}>
@@ -31,10 +30,10 @@ export default function Stepper({ steps, currentStep, className = '' }: StepperP
                                 {/* Circle */}
                                 <div
                                     className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold transition-colors ${isCompleted
-                                            ? 'bg-green-500 text-white'
-                                            : isCurrent
-                                                ? 'bg-blue-600 text-white ring-4 ring-blue-100'
-                                                : 'bg-gray-200 text-gray-500'
+                                        ? 'bg-green-500 text-white'
+                                        : isCurrent
+                                            ? 'bg-blue-600 text-white ring-4 ring-blue-100'
+                                            : 'bg-gray-200 text-gray-500'
                                         }`}
                                 >
                                     {isCompleted ? (
@@ -57,10 +56,10 @@ export default function Stepper({ steps, currentStep, className = '' }: StepperP
                                 {/* Label */}
                                 <span
                                     className={`mt-2 text-xs font-medium text-center ${isCurrent
-                                            ? 'text-gray-900'
-                                            : isCompleted
-                                                ? 'text-gray-700'
-                                                : 'text-gray-500'
+                                        ? 'text-gray-900'
+                                        : isCompleted
+                                            ? 'text-gray-700'
+                                            : 'text-gray-500'
                                         }`}
                                 >
                                     {step.label}
@@ -71,8 +70,8 @@ export default function Stepper({ steps, currentStep, className = '' }: StepperP
                             {index < steps.length - 1 && (
                                 <div
                                     className={`flex-1 h-0.5 -mt-8 transition-colors ${index < currentIndex
-                                            ? 'bg-green-500'
-                                            : 'bg-gray-200'
+                                        ? 'bg-green-500'
+                                        : 'bg-gray-200'
                                         }`}
                                 />
                             )}

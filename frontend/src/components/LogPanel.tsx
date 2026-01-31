@@ -93,10 +93,10 @@ export default function LogPanel({ logs, className = '' }: LogPanelProps) {
                 ) : (
                     logs.map((log) => (
                         <div key={log.id} className="flex items-start gap-3 text-gray-700">
-                            <span className="text-gray-400 flex-shrink-0">
+                            <span className="text-gray-400 shrink-0">
                                 {formatTime(log.timestamp)}
                             </span>
-                            <span className={`flex-shrink-0 ${getIconColor(log.type)}`}>
+                            <span className={`shrink-0 ${getIconColor(log.type)}`}>
                                 {getIcon(log.type)}
                             </span>
                             <span className="flex-1">{log.message}</span>

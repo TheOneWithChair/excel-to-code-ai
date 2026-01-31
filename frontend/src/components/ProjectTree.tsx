@@ -117,8 +117,8 @@ export default function ProjectTree({
                             </svg>
                             <span
                                 className={`text-sm ${isSelected
-                                        ? 'font-medium text-blue-700'
-                                        : 'text-gray-600'
+                                    ? 'font-medium text-blue-700'
+                                    : 'text-gray-600'
                                     }`}
                             >
                                 {node.name}
@@ -140,7 +140,7 @@ export default function ProjectTree({
             <div className="p-3 border-b border-gray-200 bg-gray-50">
                 <h3 className="text-sm font-semibold text-gray-900">Project Files</h3>
             </div>
-            <div className="overflow-y-auto max-h-[600px]">
+            <div className="overflow-y-auto max-h-150">
                 {tree.map(node => renderNode(node))}
             </div>
         </div>

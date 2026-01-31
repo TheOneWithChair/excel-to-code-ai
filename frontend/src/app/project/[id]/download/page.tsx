@@ -64,7 +64,7 @@ export default function ProjectDownloadPage({ params }: ProjectDownloadPageProps
                 {/* Success Banner */}
                 <Card className="mb-6 bg-green-50 border-green-200">
                     <div className="flex items-center gap-4">
-                        <div className="flex-shrink-0">
+                        <div className="shrink-0">
                             <svg
                                 className="h-12 w-12 text-green-600"
                                 fill="currentColor"
@@ -214,12 +214,12 @@ export default function ProjectDownloadPage({ params }: ProjectDownloadPageProps
                 {/* What's Included */}
                 <Card className="mb-6 bg-blue-50 border-blue-200">
                     <h3 className="text-sm font-semibold text-blue-900 mb-3">
-                        What's included in your download?
+                        What&apos;s included in your download?
                     </h3>
                     <ul className="space-y-2 text-sm text-blue-800">
                         <li className="flex items-start gap-2">
                             <svg
-                                className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0"
+                                className="w-4 h-4 text-blue-600 mt-0.5 shrink-0"
                                 fill="currentColor"
                                 viewBox="0 0 20 20"
                             >
@@ -233,7 +233,7 @@ export default function ProjectDownloadPage({ params }: ProjectDownloadPageProps
                         </li>
                         <li className="flex items-start gap-2">
                             <svg
-                                className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0"
+                                className="w-4 h-4 text-blue-600 mt-0.5 shrink-0"
                                 fill="currentColor"
                                 viewBox="0 0 20 20"
                             >
@@ -247,7 +247,7 @@ export default function ProjectDownloadPage({ params }: ProjectDownloadPageProps
                         </li>
                         <li className="flex items-start gap-2">
                             <svg
-                                className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0"
+                                className="w-4 h-4 text-blue-600 mt-0.5 shrink-0"
                                 fill="currentColor"
                                 viewBox="0 0 20 20"
                             >
@@ -261,7 +261,7 @@ export default function ProjectDownloadPage({ params }: ProjectDownloadPageProps
                         </li>
                         <li className="flex items-start gap-2">
                             <svg
-                                className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0"
+                                className="w-4 h-4 text-blue-600 mt-0.5 shrink-0"
                                 fill="currentColor"
                                 viewBox="0 0 20 20"
                             >
