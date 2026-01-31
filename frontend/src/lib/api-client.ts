@@ -202,6 +202,25 @@ class ApiClient {
   }
 
   /**
+   * Download project as ZIP file
+   */
+  async downloadProject(projectId: string): Promise<Blob> {
+    const response = await fetch(
+      `${this.baseUrl}/projects/${projectId}/download`,
+      {
+        method: "GET",
+      },
+    );
+
+    if (!response.ok) {
+      const error: ApiError = await response.json();
+      throw new Error(error.detail || "Failed to download project");
+    }
+
+    return response.blob();
+  }
+
+  /**
    * Health check
    */
   async healthCheck(): Promise<{ status: string }> {

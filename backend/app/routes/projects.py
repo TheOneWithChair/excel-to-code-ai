@@ -3,11 +3,14 @@ Project routes for the AutoPilot project generator.
 Handles project creation and management.
 """
 from fastapi import APIRouter, HTTPException, status, UploadFile, File, BackgroundTasks
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from pathlib import Path
 import uuid
+import zipfile
+import io
 
 from app.db.models import Project, Project_Pydantic
 from app.services import storage_service, excel_parser, spec_service, project_generator, get_ai_optimizer
@@ -563,4 +566,68 @@ Return ONLY the optimized code without explanations."""
     return OptimizeFilesResponse(
         project_id=project_id,
         optimized=results
+    )
+
+
+@router.get("/{project_id}/download")
+async def download_project(project_id: uuid.UUID):
+    """
+    Download the generated project as a ZIP file.
+    
+    Args:
+        project_id: UUID of the project
+        
+    Returns:
+        StreamingResponse with ZIP file
+    """
+    # Validate project exists
+    project = await Project.filter(id=project_id).first()
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Project with id {project_id} not found"
+        )
+    
+    # Check if project has been generated
+    if project.status != "DONE":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Project is not ready for download. Current status: {project.status}"
+        )
+    
+    # Get project directory
+    project_dir = Path("storage/generated_projects") / str(project_id)
+    
+    if not project_dir.exists() or not project_dir.is_dir():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project files not found"
+        )
+    
+    # Create ZIP file in memory
+    zip_buffer = io.BytesIO()
+    
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        # Walk through all files in the project directory
+        for file_path in project_dir.rglob('*'):
+            if file_path.is_file():
+                # Get relative path from project directory
+                arcname = file_path.relative_to(project_dir)
+                # Add file to zip
+                zip_file.write(file_path, arcname)
+    
+    # Reset buffer position to beginning
+    zip_buffer.seek(0)
+    
+    # Generate filename
+    safe_name = project.name.replace(' ', '_').replace('/', '_')
+    filename = f"{safe_name}.zip"
+    
+    # Return streaming response
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f"attachment; filename=\"{filename}\""
+        }
     )

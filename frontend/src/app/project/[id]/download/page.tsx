@@ -1,10 +1,12 @@
 'use client';
 
-import React, { useState, use } from 'react';
+import React, { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Card from '@/components/Card';
 import Button from '@/components/Button';
 import StatusBadge, { ProjectStatus } from '@/components/StatusBadge';
+import { apiClient } from '@/lib/api-client';
+import type { Project } from '@/types/api';
 
 interface ProjectDownloadPageProps {
     params: Promise<{
@@ -12,40 +14,114 @@ interface ProjectDownloadPageProps {
     }>;
 }
 
+// Map backend status to frontend status
+function mapBackendStatus(backendStatus: string): ProjectStatus {
+    const statusMap: Record<string, ProjectStatus> = {
+        'PENDING': 'uploaded',
+        'PARSING': 'parsing',
+        'GENERATING': 'generating',
+        'DONE': 'ready',
+        'FAILED': 'error'
+    };
+    return statusMap[backendStatus] || 'uploaded';
+}
+
 export default function ProjectDownloadPage({ params }: ProjectDownloadPageProps) {
     const { id } = use(params);
     const router = useRouter();
     const [isDownloading, setIsDownloading] = useState(false);
+    const [project, setProject] = useState<Project | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
-    // Mock project data
-    const projectName = 'E-Commerce Platform';
-    const projectStatus: ProjectStatus = 'ready';
-    const techStack = ['Node.js', 'Express', 'TypeScript', 'MongoDB', 'React', 'Tailwind CSS'];
-    const filesGenerated = 127;
-    const zipSizeApprox = '2.3 MB';
+    // Fetch project data
+    useEffect(() => {
+        const fetchProject = async () => {
+            try {
+                setIsLoading(true);
+                const data = await apiClient.getProject(id);
+                setProject(data);
+            } catch (err) {
+                console.error('Error fetching project:', err);
+                setError(err instanceof Error ? err.message : 'Failed to load project');
+            } finally {
+                setIsLoading(false);
+            }
+        };
 
-    const handleDownload = () => {
-        setIsDownloading(true);
+        fetchProject();
+    }, [id]);
 
-        // Simulate download delay
-        setTimeout(() => {
-            // Create a mock blob for demonstration
-            const mockContent = `# ${projectName}\n\nProject ID: ${id}\n\nThis is a mock download. In production, this would be the actual generated project files.`;
-            const blob = new Blob([mockContent], { type: 'application/zip' });
+    const handleDownload = async () => {
+        if (!project) return;
+
+        try {
+            setIsDownloading(true);
+            setError(null);
+
+            // Download ZIP from backend
+            const blob = await apiClient.downloadProject(id);
+
+            // Create download link
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `${projectName.toLowerCase().replace(/\s+/g, '-')}-${id}.zip`;
+            a.download = `${project.name.toLowerCase().replace(/\s+/g, '-')}.zip`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             window.URL.revokeObjectURL(url);
-
+        } catch (err) {
+            console.error('Download failed:', err);
+            setError(err instanceof Error ? err.message : 'Failed to download project');
+        } finally {
             setIsDownloading(false);
-        }, 1000);
+        }
     };
 
+    if (isLoading) {
+        return (
+            <div className="min-h-screen bg-gray-50">
+                <header className="bg-white border-b border-gray-200">
+                    <div className="container mx-auto px-6 py-4">
+                        <div className="flex items-center space-x-2">
+                            <div className="w-8 h-8 bg-blue-600 rounded"></div>
+                            <span className="text-xl font-semibold">AutoPilot</span>
+                        </div>
+                    </div>
+                </header>
+                <main className="container mx-auto px-6 py-8">
+                    <div className="text-center py-12">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                        <p className="mt-4 text-gray-600">Loading project...</p>
+                    </div>
+                </main>
+            </div>
+        );
+    }
+
+    const projectStatus = project ? mapBackendStatus(project.status) : 'uploaded';
     const isReady = projectStatus === 'ready';
+
+    // Extract project data with defaults
+    const projectName = project?.name || 'Unnamed Project';
+
+    // Parse tech_stack - it might be a JSON string or already an array
+    let techStack: string[] = [];
+    if (project?.tech_stack) {
+        if (typeof project.tech_stack === 'string') {
+            try {
+                techStack = JSON.parse(project.tech_stack);
+            } catch {
+                techStack = [];
+            }
+        } else if (Array.isArray(project.tech_stack)) {
+            techStack = project.tech_stack;
+        }
+    }
+
+    const filesGenerated = '24'; // TODO: Calculate from actual file tree
+    const zipSizeApprox = '2.4 MB'; // TODO: Calculate from actual project size
 
     return (
         <div className="min-h-screen bg-gray-50">
