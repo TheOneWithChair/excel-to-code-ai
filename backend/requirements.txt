@@ -1,6 +1,7 @@
 # FastAPI and async support
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
+python-multipart==0.0.9
 
 # ORM and database
 tortoise-orm==0.21.6
@@ -9,6 +10,10 @@ asyncpg==0.29.0
 # Environment and configuration
 python-dotenv==1.0.1
 pydantic-settings==2.5.2
+
+# Excel parsing
+pandas==2.2.0
+openpyxl==3.1.2
 
 # Additional dependencies
 pydantic==2.9.2
