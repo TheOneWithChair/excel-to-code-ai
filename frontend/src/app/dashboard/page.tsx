@@ -2,9 +2,11 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import Card from '@/components/Card';
 import Button from '@/components/Button';
 import FileUploadCard from '@/components/FileUploadCard';
+import { apiClient } from '@/lib/api-client';
 
 interface UploadedFiles {
     features: File | null;
@@ -14,6 +16,7 @@ interface UploadedFiles {
 }
 
 export default function Dashboard() {
+    const router = useRouter();
     const [projectName, setProjectName] = useState('');
     const [projectDescription, setProjectDescription] = useState('');
     const [uploadedFiles, setUploadedFiles] = useState<UploadedFiles>({
@@ -22,35 +25,64 @@ export default function Dashboard() {
         database: null,
         techStack: null
     });
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [success, setSuccess] = useState<string | null>(null);
 
     const handleFileSelect = (fileType: keyof UploadedFiles, file: File) => {
         setUploadedFiles(prev => ({
             ...prev,
             [fileType]: file
         }));
+        setError(null);
+        setSuccess(null);
     };
 
     const allFilesUploaded = Object.values(uploadedFiles).every(file => file !== null);
     const isProjectNameValid = projectName.trim().length > 0;
 
-    const handleUploadAndValidate = () => {
-        // Placeholder for future API call
-        console.log('Upload and Validate:', {
-            projectName,
-            projectDescription,
-            files: uploadedFiles
-        });
-        alert('Files validation will be implemented with backend integration');
+    const handleUploadAndValidate = async () => {
+        setIsLoading(true);
+        setError(null);
+        setSuccess(null);
+
+        try {
+            // Step 1: Create project
+            const techStackValue = projectDescription || 'React + Node.js';
+            const createResponse = await apiClient.createProject({
+                name: projectName,
+                tech_stack: techStackValue,
+            });
+
+            console.log('Project created:', createResponse);
+
+            // Step 2: Upload specifications
+            const uploadResponse = await apiClient.uploadSpecs(createResponse.id, {
+                features: uploadedFiles.features || undefined,
+                apis: uploadedFiles.apis || undefined,
+                database: uploadedFiles.database || undefined,
+                tech_stack: uploadedFiles.techStack || undefined,
+            });
+
+            console.log('Specs uploaded:', uploadResponse);
+            setSuccess(`✅ ${uploadResponse.message}`);
+
+            // Optionally navigate to project status page
+            setTimeout(() => {
+                router.push(`/project/${createResponse.id}/status`);
+            }, 2000);
+        } catch (err) {
+            console.error('Error:', err);
+            setError(err instanceof Error ? err.message : 'An error occurred');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
-    const handleGenerateProject = () => {
-        // Placeholder for future API call
-        console.log('Generate Project:', {
-            projectName,
-            projectDescription,
-            files: uploadedFiles
-        });
-        alert('Project generation will be implemented with backend integration');
+    const handleGenerateProject = async () => {
+        // For now, this does the same as upload & validate
+        // Later can be extended to trigger actual code generation
+        await handleUploadAndValidate();
     };
 
     return (
@@ -144,21 +176,37 @@ export default function Dashboard() {
                         <Button
                             variant="secondary"
                             onClick={handleUploadAndValidate}
-                            disabled={!allFilesUploaded || !isProjectNameValid}
+                            disabled={!allFilesUploaded || !isProjectNameValid || isLoading}
                         >
-                            Upload & Validate
+                            {isLoading ? 'Processing...' : 'Upload & Validate'}
                         </Button>
                         <Button
                             variant="primary"
                             onClick={handleGenerateProject}
-                            disabled={!allFilesUploaded || !isProjectNameValid}
+                            disabled={!allFilesUploaded || !isProjectNameValid || isLoading}
                         >
-                            Generate Project
+                            {isLoading ? 'Processing...' : 'Generate Project'}
                         </Button>
                     </div>
 
-                    {/* Status Message */}
-                    {(!allFilesUploaded || !isProjectNameValid) && (
+                    {/* Status Messages */}
+                    {error && (
+                        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                            <p className="text-sm text-red-800">
+                                ❌ {error}
+                            </p>
+                        </div>
+                    )}
+
+                    {success && (
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                            <p className="text-sm text-green-800">
+                                {success}
+                            </p>
+                        </div>
+                    )}
+
+                    {(!allFilesUploaded || !isProjectNameValid) && !error && !success && (
                         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                             <p className="text-sm text-blue-800">
                                 {!isProjectNameValid && '📝 Please enter a project name. '}

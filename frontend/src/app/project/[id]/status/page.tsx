@@ -7,6 +7,8 @@ import Button from '@/components/Button';
 import StatusBadge, { ProjectStatus } from '@/components/StatusBadge';
 import Stepper from '@/components/Stepper';
 import LogPanel, { LogMessage } from '@/components/LogPanel';
+import { apiClient } from '@/lib/api-client';
+import type { Project } from '@/types/api';
 
 interface ProjectStatusPageProps {
     params: Promise<{
@@ -14,12 +16,83 @@ interface ProjectStatusPageProps {
     }>;
 }
 
+// Map backend status to frontend status
+function mapBackendStatus(backendStatus: string): ProjectStatus {
+    const statusMap: Record<string, ProjectStatus> = {
+        'PENDING': 'uploaded',
+        'PARSING': 'parsing',
+        'GENERATING': 'generating',
+        'DONE': 'ready',
+        'FAILED': 'error'
+    };
+    return statusMap[backendStatus] || 'uploaded';
+}
+
 export default function ProjectStatusPage({ params }: ProjectStatusPageProps) {
     const { id } = use(params);
     const router = useRouter();
-    const [projectName] = useState('E-Commerce Platform');
+    const [project, setProject] = useState<Project | null>(null);
     const [currentStatus, setCurrentStatus] = useState<ProjectStatus>('uploaded');
     const [logs, setLogs] = useState<LogMessage[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    // Fetch project data from backend
+    useEffect(() => {
+        const fetchProject = async () => {
+            try {
+                setIsLoading(true);
+                const data = await apiClient.getProject(id);
+                setProject(data);
+                setCurrentStatus(mapBackendStatus(data.status));
+
+                // Add initial log with proper structure
+                const timestamp = new Date();
+                const initialLogs: LogMessage[] = [
+                    {
+                        id: `${Date.now()}-1`,
+                        timestamp,
+                        message: `Project "${data.name}" loaded`,
+                        type: 'success'
+                    },
+                    {
+                        id: `${Date.now()}-2`,
+                        timestamp,
+                        message: `Tech Stack: ${data.tech_stack}`,
+                        type: 'info'
+                    }
+                ];
+
+                if (data.current_step) {
+                    initialLogs.push({
+                        id: `${Date.now()}-3`,
+                        timestamp,
+                        message: data.current_step,
+                        type: 'info'
+                    });
+                }
+
+                setLogs(initialLogs);
+            } catch (err) {
+                console.error('Error fetching project:', err);
+                setError(err instanceof Error ? err.message : 'Failed to load project');
+                setLogs([{
+                    id: `${Date.now()}-error`,
+                    timestamp: new Date(),
+                    message: `Error: ${err instanceof Error ? err.message : 'Failed to load project'}`,
+                    type: 'error'
+                }]);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchProject();
+
+        // Poll for updates every 5 seconds
+        const interval = setInterval(fetchProject, 5000);
+        return () => clearInterval(interval);
+    }, [id]);
 
     // Define the steps for the stepper
     const steps = [
@@ -30,109 +103,29 @@ export default function ProjectStatusPage({ params }: ProjectStatusPageProps) {
         { id: 'ready', label: 'Ready', status: 'ready' as ProjectStatus }
     ];
 
-    // Mock progress simulation
-    useEffect(() => {
-        const progressSequence = [
-            {
-                status: 'uploaded' as ProjectStatus,
-                logs: [
-                    { message: 'Project files received successfully', type: 'success' as const },
-                    { message: 'Validating Excel file structure...', type: 'info' as const }
-                ],
-                delay: 2000
-            },
-            {
-                status: 'parsing' as ProjectStatus,
-                logs: [
-                    { message: 'Starting Excel file parsing', type: 'info' as const },
-                    { message: 'Parsing features.xlsx...', type: 'info' as const },
-                    { message: 'Extracted 15 feature definitions', type: 'success' as const },
-                    { message: 'Parsing data-models.xlsx...', type: 'info' as const },
-                    { message: 'Found 8 data models', type: 'success' as const },
-                    { message: 'Parsing api-routes.xlsx...', type: 'info' as const },
-                    { message: 'Identified 24 API endpoints', type: 'success' as const }
-                ],
-                delay: 4000
-            },
-            {
-                status: 'generating' as ProjectStatus,
-                logs: [
-                    { message: 'Initializing project structure', type: 'info' as const },
-                    { message: 'Generating backend services...', type: 'info' as const },
-                    { message: 'Creating database models', type: 'info' as const },
-                    { message: 'Generating API routes', type: 'info' as const },
-                    { message: 'Building frontend components', type: 'info' as const },
-                    { message: 'Setting up authentication layer', type: 'info' as const },
-                    { message: 'Configuring middleware', type: 'info' as const },
-                    { message: 'Generated 127 files', type: 'success' as const }
-                ],
-                delay: 5000
-            },
-            {
-                status: 'optimizing' as ProjectStatus,
-                logs: [
-                    { message: 'Running code optimization', type: 'info' as const },
-                    { message: 'Formatting code files', type: 'info' as const },
-                    { message: 'Removing unused imports', type: 'info' as const },
-                    { message: 'Optimizing bundle size', type: 'info' as const },
-                    { message: 'Running linter checks', type: 'info' as const },
-                    { message: 'Verifying type definitions', type: 'info' as const },
-                    { message: 'Optimization complete', type: 'success' as const }
-                ],
-                delay: 3000
-            },
-            {
-                status: 'ready' as ProjectStatus,
-                logs: [
-                    { message: 'Project generation completed successfully!', type: 'success' as const },
-                    { message: 'All files are ready for download', type: 'success' as const }
-                ],
-                delay: 0
-            }
-        ];
-
-        let currentStep = 0;
-        let logIndex = 0;
-
-        const advanceProgress = () => {
-            if (currentStep >= progressSequence.length) return;
-
-            const step = progressSequence[currentStep];
-            setCurrentStatus(step.status);
-
-            // Add logs one by one
-            const addNextLog = () => {
-                if (logIndex < step.logs.length) {
-                    const logEntry = step.logs[logIndex];
-                    setLogs(prev => [
-                        ...prev,
-                        {
-                            id: `${Date.now()}-${logIndex}`,
-                            timestamp: new Date(),
-                            message: logEntry.message,
-                            type: logEntry.type
-                        }
-                    ]);
-                    logIndex++;
-                    setTimeout(addNextLog, 500);
-                } else {
-                    // Move to next step
-                    logIndex = 0;
-                    currentStep++;
-                    if (currentStep < progressSequence.length) {
-                        setTimeout(advanceProgress, step.delay);
-                    }
-                }
-            };
-
-            addNextLog();
-        };
-
-        // Start the simulation
-        setTimeout(advanceProgress, 1000);
-    }, []);
-
     const isReady = currentStatus === 'ready';
+    const hasError = currentStatus === 'error';
+
+    if (isLoading && !project) {
+        return (
+            <div className="min-h-screen bg-gray-50">
+                <header className="bg-white border-b border-gray-200">
+                    <div className="container mx-auto px-6 py-4">
+                        <div className="flex items-center space-x-2">
+                            <div className="w-8 h-8 bg-blue-600 rounded"></div>
+                            <span className="text-xl font-semibold">AutoPilot</span>
+                        </div>
+                    </div>
+                </header>
+                <main className="container mx-auto px-6 py-8">
+                    <div className="text-center py-12">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                        <p className="mt-4 text-gray-600">Loading project...</p>
+                    </div>
+                </main>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -153,11 +146,16 @@ export default function ProjectStatusPage({ params }: ProjectStatusPageProps) {
                     <div className="flex items-start justify-between">
                         <div>
                             <h1 className="text-2xl font-bold text-gray-900 mb-2">
-                                {projectName}
+                                {project?.name || 'Project'}
                             </h1>
                             <p className="text-sm text-gray-600">
                                 Project ID: <span className="font-mono">{id}</span>
                             </p>
+                            {project?.tech_stack && (
+                                <p className="text-sm text-gray-600 mt-1">
+                                    Tech Stack: {project.tech_stack}
+                                </p>
+                            )}
                         </div>
                         <StatusBadge status={currentStatus} />
                     </div>
@@ -168,8 +166,29 @@ export default function ProjectStatusPage({ params }: ProjectStatusPageProps) {
                     <Stepper steps={steps} currentStep={currentStatus} />
                 </Card>
 
+                {/* Error Message */}
+                {hasError && (
+                    <Card className="mb-6 bg-red-50 border-red-200">
+                        <div className="flex items-center gap-4">
+                            <div className="shrink-0">
+                                <svg className="h-8 w-8 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-semibold text-red-900">
+                                    Project Generation Failed
+                                </h3>
+                                <p className="text-sm text-red-800">
+                                    {project?.current_step || 'An error occurred during project generation.'}
+                                </p>
+                            </div>
+                        </div>
+                    </Card>
+                )}
+
                 {/* Progress Indicator */}
-                {!isReady && (
+                {!isReady && !hasError && (
                     <Card className="mb-6">
                         <div className="flex items-center gap-4">
                             <div className="shrink-0">
@@ -196,10 +215,12 @@ export default function ProjectStatusPage({ params }: ProjectStatusPageProps) {
                             </div>
                             <div>
                                 <h3 className="text-lg font-semibold text-gray-900">
-                                    Processing Your Project
+                                    {currentStatus === 'parsing' && 'Parsing Excel Files'}
+                                    {currentStatus === 'generating' && 'Generating Project'}
+                                    {currentStatus === 'uploaded' && 'Processing Upload'}
                                 </h3>
                                 <p className="text-sm text-gray-600">
-                                    This may take a few minutes. Please do not close this window.
+                                    {project?.current_step || 'Please wait while we process your project...'}
                                 </p>
                             </div>
                         </div>
