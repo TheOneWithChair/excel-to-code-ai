@@ -10,7 +10,7 @@ from pathlib import Path
 import uuid
 
 from app.db.models import Project, Project_Pydantic
-from app.services import storage_service, excel_parser, spec_service, project_generator
+from app.services import storage_service, excel_parser, spec_service, project_generator, get_ai_optimizer
 from app.utils import build_file_tree, file_reader
 
 
@@ -385,4 +385,182 @@ async def get_file_content(project_id: uuid.UUID, path: str):
     return FileContentResponse(
         path=path,
         content=content
+    )
+
+
+class OptimizeFilesRequest(BaseModel):
+    """Request model for file optimization."""
+    files: List[str] = Field(..., description="List of file paths to optimize")
+
+
+class OptimizedFileResult(BaseModel):
+    """Result for a single optimized file."""
+    path: str
+    success: bool
+    message: str
+
+
+class OptimizeFilesResponse(BaseModel):
+    """Response model for file optimization."""
+    project_id: uuid.UUID
+    optimized: List[OptimizedFileResult]
+
+
+@router.post("/{project_id}/optimize", response_model=OptimizeFilesResponse)
+async def optimize_project_files(
+    project_id: uuid.UUID,
+    request: OptimizeFilesRequest
+):
+    """
+    Optimize project files using AI.
+    
+    Args:
+        project_id: UUID of the project
+        request: List of file paths to optimize
+        
+    Returns:
+        Results of optimization for each file
+    """
+    # Validate project exists
+    project = await Project.filter(id=project_id).first()
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Project with id {project_id} not found"
+        )
+    
+    # Get project directory path
+    base_dir = Path("storage/generated_projects") / str(project_id)
+    
+    if not base_dir.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Generated project files not found"
+        )
+    
+    results = []
+    
+    # Import models for optimization tracking
+    from app.db.models import ProjectFile, GenerationLog
+    
+    for file_path in request.files:
+        try:
+            # Validate path
+            is_valid, error_msg = file_reader.validate_path(file_path)
+            if not is_valid:
+                results.append(OptimizedFileResult(
+                    path=file_path,
+                    success=False,
+                    message=f"Invalid path: {error_msg}"
+                ))
+                continue
+            
+            # Read file content
+            success, content, error_msg = file_reader.safe_read_file(base_dir, file_path)
+            
+            if not success:
+                results.append(OptimizedFileResult(
+                    path=file_path,
+                    success=False,
+                    message=error_msg or "Failed to read file"
+                ))
+                continue
+            
+            # Build optimization prompt
+            prompt = f"""Optimize the following code. Improve:
+- Code quality and readability
+- Performance and efficiency
+- Error handling
+- Documentation and comments
+- Best practices
+
+File: {file_path}
+
+Code:
+{content}
+
+Return ONLY the optimized code without explanations."""
+            
+            # Log optimization start
+            await GenerationLog.create(
+                project_id=project_id,
+                step="optimization",
+                message=f"Starting AI optimization for {file_path}"
+            )
+            
+            # Call AI optimizer
+            try:
+                ai_optimizer = get_ai_optimizer()
+                optimized_content = await ai_optimizer.optimize_code(prompt)
+                
+                # Write optimized content back to file
+                file_full_path = base_dir / file_path
+                file_full_path.write_text(optimized_content, encoding='utf-8')
+                
+                # Update or create ProjectFile record
+                project_file = await ProjectFile.filter(
+                    project_id=project_id,
+                    path=file_path
+                ).first()
+                
+                if project_file:
+                    project_file.is_optimized = True
+                    await project_file.save()
+                else:
+                    # Determine file type from path
+                    if "backend" in file_path:
+                        file_type = "backend"
+                    elif "frontend" in file_path:
+                        file_type = "frontend"
+                    elif "database" in file_path:
+                        file_type = "database"
+                    else:
+                        file_type = "docs"
+                    
+                    await ProjectFile.create(
+                        project_id=project_id,
+                        path=file_path,
+                        file_type=file_type,
+                        is_optimized=True
+                    )
+                
+                # Log success
+                await GenerationLog.create(
+                    project_id=project_id,
+                    step="optimization",
+                    message=f"Successfully optimized {file_path}"
+                )
+                
+                results.append(OptimizedFileResult(
+                    path=file_path,
+                    success=True,
+                    message="File optimized successfully"
+                ))
+            
+            except Exception as ai_error:
+                error_message = f"AI optimization failed: {str(ai_error)}"
+                
+                # Log failure
+                await GenerationLog.create(
+                    project_id=project_id,
+                    step="optimization_error",
+                    message=f"Failed to optimize {file_path}: {error_message}"
+                )
+                
+                results.append(OptimizedFileResult(
+                    path=file_path,
+                    success=False,
+                    message=error_message
+                ))
+        
+        except Exception as e:
+            results.append(OptimizedFileResult(
+                path=file_path,
+                success=False,
+                message=f"Unexpected error: {str(e)}"
+            ))
+    
+    return OptimizeFilesResponse(
+        project_id=project_id,
+        optimized=results
     )
