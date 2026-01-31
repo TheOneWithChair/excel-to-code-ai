@@ -35,7 +35,42 @@ export default function ProjectStatusPage({ params }: ProjectStatusPageProps) {
     const [currentStatus, setCurrentStatus] = useState<ProjectStatus>('uploaded');
     const [logs, setLogs] = useState<LogMessage[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [isRetrying, setIsRetrying] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    // Manual retry generation for stuck projects
+    const handleRetryGeneration = async () => {
+        if (!project) return;
+
+        try {
+            setIsRetrying(true);
+            setError(null);
+            await apiClient.generateProject(project.id);
+
+            // Refresh project status
+            const data = await apiClient.getProject(id);
+            setProject(data);
+            setCurrentStatus(mapBackendStatus(data.status));
+
+            setLogs(prev => [...prev, {
+                id: `${Date.now()}-retry`,
+                timestamp: new Date(),
+                message: 'Generation restarted manually',
+                type: 'success'
+            }]);
+        } catch (err) {
+            console.error('Retry failed:', err);
+            setError(err instanceof Error ? err.message : 'Failed to restart generation');
+            setLogs(prev => [...prev, {
+                id: `${Date.now()}-retry-error`,
+                timestamp: new Date(),
+                message: `Retry failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+                type: 'error'
+            }]);
+        } finally {
+            setIsRetrying(false);
+        }
+    };
 
     // Fetch project data from backend
     useEffect(() => {
@@ -60,12 +95,18 @@ export default function ProjectStatusPage({ params }: ProjectStatusPageProps) {
                         timestamp,
                         message: `Tech Stack: ${data.tech_stack}`,
                         type: 'info'
+                    },
+                    {
+                        id: `${Date.now()}-3`,
+                        timestamp,
+                        message: `Status: ${data.status}`,
+                        type: 'info'
                     }
                 ];
 
                 if (data.current_step) {
                     initialLogs.push({
-                        id: `${Date.now()}-3`,
+                        id: `${Date.now()}-4`,
                         timestamp,
                         message: data.current_step,
                         type: 'info'
@@ -89,8 +130,24 @@ export default function ProjectStatusPage({ params }: ProjectStatusPageProps) {
 
         fetchProject();
 
-        // Poll for updates every 5 seconds
-        const interval = setInterval(fetchProject, 5000);
+        // Poll for updates every 5 seconds, but stop if project reaches terminal state
+        const interval = setInterval(async () => {
+            try {
+                const data = await apiClient.getProject(id);
+                const status = data.status;
+
+                // Stop polling if project is done or failed
+                if (status === 'DONE' || status === 'FAILED') {
+                    clearInterval(interval);
+                }
+
+                setProject(data);
+                setCurrentStatus(mapBackendStatus(status));
+            } catch (err) {
+                console.error('Polling error:', err);
+            }
+        }, 5000);
+
         return () => clearInterval(interval);
     }, [id]);
 
@@ -213,7 +270,7 @@ export default function ProjectStatusPage({ params }: ProjectStatusPageProps) {
                                     ></path>
                                 </svg>
                             </div>
-                            <div>
+                            <div className="flex-1">
                                 <h3 className="text-lg font-semibold text-gray-900">
                                     {currentStatus === 'parsing' && 'Parsing Excel Files'}
                                     {currentStatus === 'generating' && 'Generating Project'}
@@ -223,6 +280,15 @@ export default function ProjectStatusPage({ params }: ProjectStatusPageProps) {
                                     {project?.current_step || 'Please wait while we process your project...'}
                                 </p>
                             </div>
+                            {currentStatus === 'uploaded' && project?.status === 'PENDING' && (
+                                <Button
+                                    onClick={handleRetryGeneration}
+                                    disabled={isRetrying}
+                                    variant="secondary"
+                                >
+                                    {isRetrying ? 'Starting...' : 'Start Generation'}
+                                </Button>
+                            )}
                         </div>
                     </Card>
                 )}

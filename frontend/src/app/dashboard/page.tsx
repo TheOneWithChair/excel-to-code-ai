@@ -48,6 +48,7 @@ export default function Dashboard() {
 
         try {
             // Step 1: Create project
+            setSuccess('Creating project...');
             const techStackValue = projectDescription || 'React + Node.js';
             const createResponse = await apiClient.createProject({
                 name: projectName,
@@ -57,6 +58,7 @@ export default function Dashboard() {
             console.log('Project created:', createResponse);
 
             // Step 2: Upload specifications
+            setSuccess('Uploading specifications...');
             const uploadResponse = await apiClient.uploadSpecs(createResponse.id, {
                 features: uploadedFiles.features || undefined,
                 apis: uploadedFiles.apis || undefined,
@@ -65,15 +67,35 @@ export default function Dashboard() {
             });
 
             console.log('Specs uploaded:', uploadResponse);
-            setSuccess(`✅ ${uploadResponse.message}`);
 
-            // Optionally navigate to project status page
+            // Small delay to ensure database writes are complete
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            // Step 3: Trigger project generation
+            setSuccess('Starting project generation...');
+            const generateResponse = await apiClient.generateProject(createResponse.id);
+            console.log('Generation started:', generateResponse);
+
+            setSuccess(`✅ Project generation started! Redirecting...`);
+
+            // Navigate to project status page
             setTimeout(() => {
                 router.push(`/project/${createResponse.id}/status`);
-            }, 2000);
+            }, 1000);
         } catch (err) {
-            console.error('Error:', err);
-            setError(err instanceof Error ? err.message : 'An error occurred');
+            console.error('Error during project creation:', err);
+
+            // Show specific error message based on the step that failed
+            let errorMessage = 'An error occurred. Please try again.';
+            if (err instanceof Error) {
+                errorMessage = err.message;
+                console.error('Error details:', {
+                    message: err.message,
+                    stack: err.stack
+                });
+            }
+
+            setError(`❌ ${errorMessage}`);
         } finally {
             setIsLoading(false);
         }
@@ -200,9 +222,33 @@ export default function Dashboard() {
 
                     {success && (
                         <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                            <p className="text-sm text-green-800">
-                                {success}
-                            </p>
+                            <div className="flex items-center gap-3">
+                                {isLoading && (
+                                    <svg
+                                        className="animate-spin h-5 w-5 text-green-600"
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <circle
+                                            className="opacity-25"
+                                            cx="12"
+                                            cy="12"
+                                            r="10"
+                                            stroke="currentColor"
+                                            strokeWidth="4"
+                                        ></circle>
+                                        <path
+                                            className="opacity-75"
+                                            fill="currentColor"
+                                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                        ></path>
+                                    </svg>
+                                )}
+                                <p className="text-sm text-green-800">
+                                    {success}
+                                </p>
+                            </div>
                         </div>
                     )}
 

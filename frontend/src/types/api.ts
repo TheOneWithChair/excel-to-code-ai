@@ -28,6 +28,33 @@ export interface UploadSpecsResponse {
   uploaded_files: string[];
 }
 
+export interface FileTreeNode {
+  name: string;
+  path: string;
+  type: "file" | "directory";
+  children?: FileTreeNode[];
+}
+
+export interface FileContentResponse {
+  project_id: string;
+  file_path: string;
+  content: string;
+}
+
+export interface OptimizeFilesRequest {
+  files: string[];
+}
+
+export interface OptimizeFilesResponse {
+  project_id: string;
+  results: {
+    [filePath: string]: {
+      success: boolean;
+      message: string;
+    };
+  };
+}
+
 export interface ApiError {
   detail: string;
 }

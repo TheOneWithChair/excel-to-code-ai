@@ -4,6 +4,10 @@ import type {
   CreateProjectResponse,
   Project,
   UploadSpecsResponse,
+  FileTreeNode,
+  FileContentResponse,
+  OptimizeFilesRequest,
+  OptimizeFilesResponse,
   ApiError,
 } from "@/types/api";
 
@@ -95,6 +99,103 @@ class ApiClient {
     if (!response.ok) {
       const error: ApiError = await response.json();
       throw new Error(error.detail || "Failed to upload specifications");
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Trigger project generation
+   */
+  async generateProject(
+    projectId: string,
+  ): Promise<{ message: string; project_id: string }> {
+    const response = await fetch(
+      `${this.baseUrl}/projects/${projectId}/generate`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      },
+    );
+
+    if (!response.ok) {
+      const error: ApiError = await response.json();
+      throw new Error(error.detail || "Failed to start project generation");
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Get project file tree
+   */
+  async getFiles(projectId: string): Promise<FileTreeNode> {
+    const response = await fetch(
+      `${this.baseUrl}/projects/${projectId}/files`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      },
+    );
+
+    if (!response.ok) {
+      const error: ApiError = await response.json();
+      throw new Error(error.detail || "Failed to fetch files");
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Get file content
+   */
+  async getFileContent(
+    projectId: string,
+    filePath: string,
+  ): Promise<FileContentResponse> {
+    const response = await fetch(
+      `${this.baseUrl}/projects/${projectId}/files/content?path=${encodeURIComponent(filePath)}`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      },
+    );
+
+    if (!response.ok) {
+      const error: ApiError = await response.json();
+      throw new Error(error.detail || "Failed to fetch file content");
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Optimize selected files using AI
+   */
+  async optimizeFiles(
+    projectId: string,
+    files: string[],
+  ): Promise<OptimizeFilesResponse> {
+    const response = await fetch(
+      `${this.baseUrl}/projects/${projectId}/optimize`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ files }),
+      },
+    );
+
+    if (!response.ok) {
+      const error: ApiError = await response.json();
+      throw new Error(error.detail || "Failed to optimize files");
     }
 
     return response.json();

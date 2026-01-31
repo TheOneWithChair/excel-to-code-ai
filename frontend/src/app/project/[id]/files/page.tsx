@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState, use } from 'react';
+import React, { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
+import Card from '@/components/Card';
 import Button from '@/components/Button';
-import ProjectTree, { FileNode } from '@/components/ProjectTree';
-import FileViewer from '@/components/FileViewer';
-import OptimizationPanel from '@/components/OptimizationPanel';
+import { apiClient } from '@/lib/api-client';
+import type { FileTreeNode, FileContentResponse, OptimizeFilesResponse } from '@/types/api';
 
 interface ProjectFilesPageProps {
     params: Promise<{
@@ -365,58 +365,165 @@ MIT`
 export default function ProjectFilesPage({ params }: ProjectFilesPageProps) {
     const { id } = use(params);
     const router = useRouter();
-    const [selectedFile, setSelectedFile] = useState<FileNode | null>(null);
-    const [selectedForOptimization, setSelectedForOptimization] = useState<Set<string>>(new Set());
+    const [fileTree, setFileTree] = useState<FileTreeNode | null>(null);
+    const [selectedFile, setSelectedFile] = useState<string | null>(null);
+    const [fileContent, setFileContent] = useState<string>('');
+    const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+    const [isLoadingTree, setIsLoadingTree] = useState(true);
+    const [isLoadingContent, setIsLoadingContent] = useState(false);
+    const [isOptimizing, setIsOptimizing] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [optimizationResults, setOptimizationResults] = useState<string | null>(null);
 
-    // Flatten tree to get file names for optimization panel
-    const flattenTree = (nodes: FileNode[]): FileNode[] => {
-        return nodes.reduce((acc: FileNode[], node) => {
-            acc.push(node);
-            if (node.children) {
-                acc.push(...flattenTree(node.children));
+    // Fetch file tree on mount
+    useEffect(() => {
+        const fetchFileTree = async () => {
+            try {
+                setIsLoadingTree(true);
+                setError(null);
+                const data = await apiClient.getFiles(id);
+                setFileTree(data);
+            } catch (err) {
+                console.error('Error fetching file tree:', err);
+                setError(err instanceof Error ? err.message : 'Failed to load files');
+            } finally {
+                setIsLoadingTree(false);
             }
-            return acc;
-        }, []);
-    };
+        };
 
-    const allNodes = flattenTree(mockProjectStructure);
+        fetchFileTree();
+    }, [id]);
 
-    const handleFileSelect = (file: FileNode) => {
-        if (file.type === 'file') {
-            setSelectedFile(file);
+    // Fetch file content when a file is selected
+    const handleFileClick = async (filePath: string) => {
+        try {
+            setIsLoadingContent(true);
+            setError(null);
+            setSelectedFile(filePath);
+            const data: FileContentResponse = await apiClient.getFileContent(id, filePath);
+            setFileContent(data.content);
+        } catch (err) {
+            console.error('Error fetching file content:', err);
+            setError(err instanceof Error ? err.message : 'Failed to load file content');
+            setFileContent('');
+        } finally {
+            setIsLoadingContent(false);
         }
     };
 
-    const handleToggleOptimization = (id: string) => {
-        setSelectedForOptimization(prev => {
-            const next = new Set(prev);
-            if (next.has(id)) {
-                next.delete(id);
-            } else {
-                next.add(id);
+    // Toggle file selection
+    const handleFileSelect = (filePath: string, checked: boolean) => {
+        const newSelected = new Set(selectedFiles);
+        if (checked) {
+            newSelected.add(filePath);
+        } else {
+            newSelected.delete(filePath);
+        }
+        setSelectedFiles(newSelected);
+    };
+
+    // Optimize selected files
+    const handleOptimize = async () => {
+        if (selectedFiles.size === 0) {
+            setError('Please select at least one file to optimize');
+            return;
+        }
+
+        try {
+            setIsOptimizing(true);
+            setError(null);
+            setOptimizationResults(null);
+
+            const files = Array.from(selectedFiles);
+            const response: OptimizeFilesResponse = await apiClient.optimizeFiles(id, files);
+
+            // Build results message
+            const results = Object.entries(response.results)
+                .map(([path, result]) => `${path}: ${result.success ? '✓ Success' : '✗ Failed'} - ${result.message}`)
+                .join('\n');
+
+            setOptimizationResults(results);
+
+            // Refresh file content if current file was optimized
+            if (selectedFile && selectedFiles.has(selectedFile)) {
+                const data: FileContentResponse = await apiClient.getFileContent(id, selectedFile);
+                setFileContent(data.content);
             }
-            return next;
-        });
+
+            // Clear selection
+            setSelectedFiles(new Set());
+        } catch (err) {
+            console.error('Error optimizing files:', err);
+            setError(err instanceof Error ? err.message : 'Failed to optimize files');
+        } finally {
+            setIsOptimizing(false);
+        }
     };
 
-    const handleOptimize = () => {
-        const selectedItems = Array.from(selectedForOptimization)
-            .map(id => allNodes.find(node => node.id === id)?.path)
-            .filter(Boolean);
+    // Render file tree recursively
+    const renderFileTree = (node: FileTreeNode, depth: number = 0) => {
+        const isFile = node.type === 'file';
+        const isSelected = selectedFiles.has(node.path);
+        const isCurrentFile = selectedFile === node.path;
 
-        alert(`Optimizing ${selectedItems.length} item(s):\n${selectedItems.join('\n')}`);
+        return (
+            <div key={node.path} style={{ marginLeft: `${depth * 20}px` }}>
+                <div
+                    className={`flex items-center gap-2 py-1.5 px-2 rounded cursor-pointer hover:bg-gray-100 ${isCurrentFile ? 'bg-blue-50' : ''
+                        }`}
+                >
+                    {isFile && (
+                        <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={(e) => handleFileSelect(node.path, e.target.checked)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-4 h-4"
+                        />
+                    )}
+                    <div
+                        className="flex items-center gap-2 flex-1"
+                        onClick={() => isFile && handleFileClick(node.path)}
+                    >
+                        {isFile ? (
+                            <svg className="w-4 h-4 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
+                            </svg>
+                        ) : (
+                            <svg className="w-4 h-4 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
+                            </svg>
+                        )}
+                        <span className={`text-sm ${isFile ? 'text-gray-700' : 'font-semibold text-gray-900'}`}>
+                            {node.name}
+                        </span>
+                    </div>
+                </div>
+                {node.children && node.children.map((child) => renderFileTree(child, depth + 1))}
+            </div>
+        );
     };
 
-    const handleRegenerate = () => {
-        const selectedItems = Array.from(selectedForOptimization)
-            .map(id => allNodes.find(node => node.id === id)?.path)
-            .filter(Boolean);
-
-        alert(`Regenerating ${selectedItems.length} module(s):\n${selectedItems.join('\n')}`);
-    };
-
-    const selectedItemPaths = Array.from(selectedForOptimization)
-        .map(id => allNodes.find(node => node.id === id)?.name || id);
+    if (isLoadingTree) {
+        return (
+            <div className="min-h-screen bg-gray-50">
+                <header className="bg-white border-b border-gray-200">
+                    <div className="container mx-auto px-6 py-4">
+                        <div className="flex items-center space-x-2">
+                            <div className="w-8 h-8 bg-blue-600 rounded"></div>
+                            <span className="text-xl font-semibold">AutoPilot</span>
+                        </div>
+                    </div>
+                </header>
+                <main className="container mx-auto px-6 py-8">
+                    <div className="text-center py-12">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                        <p className="mt-4 text-gray-600">Loading files...</p>
+                    </div>
+                </main>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -428,62 +535,82 @@ export default function ProjectFilesPage({ params }: ProjectFilesPageProps) {
                             <div className="w-8 h-8 bg-blue-600 rounded"></div>
                             <span className="text-xl font-semibold">AutoPilot</span>
                         </div>
-                        <div className="flex gap-3">
-                            <Button
-                                variant="secondary"
-                                onClick={() => router.push(`/project/${id}/status`)}
-                            >
-                                Back to Status
-                            </Button>
-                            <Button onClick={() => router.push(`/project/${id}/download`)}>
-                                Download Project
-                            </Button>
-                        </div>
+                        <Button variant="secondary" onClick={() => router.push(`/project/${id}/status`)}>
+                            Back to Status
+                        </Button>
                     </div>
                 </div>
             </header>
 
             {/* Main Content */}
-            <main className="container mx-auto px-6 py-6">
-                {/* Page Title */}
-                <div className="mb-6">
-                    <h1 className="text-2xl font-bold text-gray-900">Project Files</h1>
-                    <p className="text-sm text-gray-600 mt-1">
-                        Project ID: <span className="font-mono">{id}</span>
-                    </p>
-                </div>
+            <main className="container mx-auto px-6 py-8 max-w-7xl">
+                <h1 className="text-2xl font-bold text-gray-900 mb-6">Project Files</h1>
 
-                {/* Two Column Layout */}
-                <div className="grid grid-cols-12 gap-6">
-                    {/* Left Column - Project Tree */}
-                    <div className="col-span-3">
-                        <ProjectTree
-                            tree={mockProjectStructure}
-                            selectedFile={selectedFile?.id || null}
-                            selectedForOptimization={selectedForOptimization}
-                            onFileSelect={handleFileSelect}
-                            onToggleOptimization={handleToggleOptimization}
-                        />
+                {/* Error Message */}
+                {error && (
+                    <Card className="mb-6 bg-red-50 border-red-200">
+                        <p className="text-red-800">{error}</p>
+                    </Card>
+                )}
+
+                {/* Optimization Results */}
+                {optimizationResults && (
+                    <Card className="mb-6 bg-green-50 border-green-200">
+                        <h3 className="text-lg font-semibold text-green-900 mb-2">Optimization Results</h3>
+                        <pre className="text-sm text-green-800 whitespace-pre-wrap font-mono">
+                            {optimizationResults}
+                        </pre>
+                    </Card>
+                )}
+
+                {/* Action Bar */}
+                <Card className="mb-6">
+                    <div className="flex items-center justify-between">
+                        <div className="text-sm text-gray-600">
+                            {selectedFiles.size > 0 ? (
+                                <span>{selectedFiles.size} file{selectedFiles.size > 1 ? 's' : ''} selected</span>
+                            ) : (
+                                <span>Select files to optimize</span>
+                            )}
+                        </div>
+                        <Button
+                            onClick={handleOptimize}
+                            disabled={selectedFiles.size === 0 || isOptimizing}
+                        >
+                            {isOptimizing ? 'Optimizing...' : 'Optimize Selected'}
+                        </Button>
                     </div>
+                </Card>
 
-                    {/* Right Column - File Viewer & Optimization Panel */}
-                    <div className="col-span-9 space-y-6">
-                        {/* File Viewer */}
-                        <FileViewer
-                            fileName={selectedFile?.name || null}
-                            filePath={selectedFile?.path || null}
-                            content={selectedFile?.content || null}
-                            className="min-h-125"
-                        />
+                {/* Two-column layout */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* File Tree */}
+                    <Card>
+                        <h2 className="text-lg font-semibold text-gray-900 mb-4">File Explorer</h2>
+                        <div className="max-h-[600px] overflow-y-auto">
+                            {fileTree ? renderFileTree(fileTree) : <p className="text-gray-500">No files found</p>}
+                        </div>
+                    </Card>
 
-                        {/* Optimization Panel */}
-                        <OptimizationPanel
-                            selectedCount={selectedForOptimization.size}
-                            selectedItems={selectedItemPaths}
-                            onOptimize={handleOptimize}
-                            onRegenerate={handleRegenerate}
-                        />
-                    </div>
+                    {/* File Content Viewer */}
+                    <Card>
+                        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                            {selectedFile ? selectedFile : 'File Content'}
+                        </h2>
+                        {isLoadingContent ? (
+                            <div className="flex items-center justify-center py-12">
+                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                            </div>
+                        ) : selectedFile ? (
+                            <div className="max-h-[600px] overflow-auto bg-gray-50 rounded p-4">
+                                <pre className="text-sm font-mono whitespace-pre-wrap">{fileContent}</pre>
+                            </div>
+                        ) : (
+                            <div className="flex items-center justify-center py-12 text-gray-500">
+                                Select a file to view its content
+                            </div>
+                        )}
+                    </Card>
                 </div>
             </main>
         </div>
