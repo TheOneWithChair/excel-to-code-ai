@@ -31,7 +31,7 @@ export interface UploadSpecsResponse {
 export interface FileTreeNode {
   name: string;
   path: string;
-  type: "file" | "directory";
+  type: "file" | "directory" | "folder";
   children?: FileTreeNode[];
 }
 
@@ -45,14 +45,15 @@ export interface OptimizeFilesRequest {
   files: string[];
 }
 
+export interface OptimizedFileResult {
+  path: string;
+  success: boolean;
+  message: string;
+}
+
 export interface OptimizeFilesResponse {
   project_id: string;
-  results: {
-    [filePath: string]: {
-      success: boolean;
-      message: string;
-    };
-  };
+  optimized: OptimizedFileResult[];
 }
 
 export interface ApiError {

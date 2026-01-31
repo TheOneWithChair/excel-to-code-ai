@@ -365,7 +365,7 @@ MIT`
 export default function ProjectFilesPage({ params }: ProjectFilesPageProps) {
     const { id } = use(params);
     const router = useRouter();
-    const [fileTree, setFileTree] = useState<FileTreeNode | null>(null);
+    const [fileTree, setFileTree] = useState<FileTreeNode[] | null>(null);
     const [selectedFile, setSelectedFile] = useState<string | null>(null);
     const [fileContent, setFileContent] = useState<string>('');
     const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
@@ -382,6 +382,8 @@ export default function ProjectFilesPage({ params }: ProjectFilesPageProps) {
                 setIsLoadingTree(true);
                 setError(null);
                 const data = await apiClient.getFiles(id);
+                console.log('File tree response:', data);
+                console.log('File tree type:', typeof data, Array.isArray(data));
                 setFileTree(data);
             } catch (err) {
                 console.error('Error fetching file tree:', err);
@@ -435,11 +437,18 @@ export default function ProjectFilesPage({ params }: ProjectFilesPageProps) {
             setOptimizationResults(null);
 
             const files = Array.from(selectedFiles);
+            console.log('Optimizing files:', files);
             const response: OptimizeFilesResponse = await apiClient.optimizeFiles(id, files);
+            console.log('Optimization response:', response);
+
+            // Check if response has optimized array
+            if (!response.optimized || !Array.isArray(response.optimized)) {
+                throw new Error('Invalid response format from optimization API');
+            }
 
             // Build results message
-            const results = Object.entries(response.results)
-                .map(([path, result]) => `${path}: ${result.success ? '✓ Success' : '✗ Failed'} - ${result.message}`)
+            const results = response.optimized
+                .map((result) => `${result.path}: ${result.success ? '✓ Success' : '✗ Failed'} - ${result.message}`)
                 .join('\n');
 
             setOptimizationResults(results);
@@ -461,29 +470,32 @@ export default function ProjectFilesPage({ params }: ProjectFilesPageProps) {
     };
 
     // Render file tree recursively
-    const renderFileTree = (node: FileTreeNode, depth: number = 0) => {
+    const renderFileTree = (node: FileTreeNode, parentPath: string = '', depth: number = 0) => {
         const isFile = node.type === 'file';
-        const isSelected = selectedFiles.has(node.path);
-        const isCurrentFile = selectedFile === node.path;
+        const isFolder = node.type === 'directory' || node.type === 'folder';
+        // Build full path for this node
+        const fullPath = parentPath ? `${parentPath}/${node.name}` : node.name;
+        const isSelected = selectedFiles.has(fullPath);
+        const isCurrentFile = selectedFile === fullPath;
 
         return (
-            <div key={node.path} style={{ marginLeft: `${depth * 20}px` }}>
+            <div key={fullPath} style={{ marginLeft: `${depth * 20}px` }}>
                 <div
-                    className={`flex items-center gap-2 py-1.5 px-2 rounded cursor-pointer hover:bg-gray-100 ${isCurrentFile ? 'bg-blue-50' : ''
-                        }`}
+                    className={`flex items-center gap-2 py-1.5 px-2 rounded ${isFile ? 'cursor-pointer hover:bg-gray-100' : ''
+                        } ${isCurrentFile ? 'bg-blue-50' : ''}`}
                 >
                     {isFile && (
                         <input
                             type="checkbox"
                             checked={isSelected}
-                            onChange={(e) => handleFileSelect(node.path, e.target.checked)}
+                            onChange={(e) => handleFileSelect(fullPath, e.target.checked)}
                             onClick={(e) => e.stopPropagation()}
                             className="w-4 h-4"
                         />
                     )}
                     <div
                         className="flex items-center gap-2 flex-1"
-                        onClick={() => isFile && handleFileClick(node.path)}
+                        onClick={() => isFile && handleFileClick(fullPath)}
                     >
                         {isFile ? (
                             <svg className="w-4 h-4 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
@@ -499,7 +511,7 @@ export default function ProjectFilesPage({ params }: ProjectFilesPageProps) {
                         </span>
                     </div>
                 </div>
-                {node.children && node.children.map((child) => renderFileTree(child, depth + 1))}
+                {node.children && node.children.map((child) => renderFileTree(child, fullPath, depth + 1))}
             </div>
         );
     };
@@ -588,7 +600,11 @@ export default function ProjectFilesPage({ params }: ProjectFilesPageProps) {
                     <Card>
                         <h2 className="text-lg font-semibold text-gray-900 mb-4">File Explorer</h2>
                         <div className="max-h-[600px] overflow-y-auto">
-                            {fileTree ? renderFileTree(fileTree) : <p className="text-gray-500">No files found</p>}
+                            {fileTree && fileTree.length > 0 ? (
+                                fileTree.map((node) => renderFileTree(node, '', 0))
+                            ) : (
+                                <p className="text-gray-500">No files found</p>
+                            )}
                         </div>
                     </Card>
 
