@@ -15,9 +15,85 @@ import io
 from app.db.models import Project, Project_Pydantic
 from app.services import storage_service, excel_parser, spec_service, project_generator, get_ai_optimizer
 from app.utils import build_file_tree, file_reader
+import re
 
 
 router = APIRouter(prefix="/projects", tags=["projects"])
+
+
+def detect_language_from_code(code: str) -> Optional[str]:
+    """
+    Detect programming language from code content.
+    
+    Returns language identifier: 'java', 'python', 'javascript', 'typescript', etc.
+    """
+    code_lower = code.lower()
+    code_sample = code[:2000]  # Check first 2000 chars
+    
+    # Java indicators - check these first as they're most specific
+    java_indicators = [
+        'package ',
+        '@entity',
+        '@table',
+        '@configuration',
+        '@bean',
+        '@value(',
+        '@component',
+        '@service',
+        '@repository',
+        '@controller',
+        'public class',
+        'private class',
+        'import javax',
+        'import org.springframework',
+        'import java.',
+        'datasource',
+        '@autowired'
+    ]
+    
+    if any(indicator in code_lower for indicator in java_indicators):
+        return 'java'
+    
+    # Python indicators
+    if any(marker in code_sample for marker in ['def ', 'import ', 'from ', 'class ', '__init__']) and 'function' not in code_sample:
+        if re.search(r'^(def|class|import|from)\s', code_sample, re.MULTILINE):
+            return 'python'
+    
+    # TypeScript indicators
+    if any(marker in code_sample for marker in ['interface ', ': string', ': number', ': boolean', 'type ', 'export interface', 'export type']):
+        return 'typescript'
+    
+    # JavaScript indicators (after TypeScript check)
+    if any(marker in code_sample for marker in ['function ', 'const ', 'let ', 'var ', 'export ', 'module.exports']):
+        return 'javascript'
+    
+    # Go indicators
+    if any(marker in code_sample for marker in ['package main', 'func ', 'import (', 'type struct']):
+        return 'go'
+    
+    # C# indicators
+    if any(marker in code_sample for marker in ['using System', 'namespace ', 'public class', 'private class']) and 'java' not in code_lower:
+        return 'csharp'
+    
+    return None
+
+
+def get_extension_for_language(language: str) -> str:
+    """Get appropriate file extension for a programming language."""
+    extension_map = {
+        'java': '.java',
+        'python': '.py',
+        'javascript': '.js',
+        'typescript': '.ts',
+        'go': '.go',
+        'csharp': '.cs',
+        'ruby': '.rb',
+        'php': '.php',
+        'rust': '.rs',
+        'kotlin': '.kt',
+        'swift': '.swift'
+    }
+    return extension_map.get(language, '')
 
 
 class CreateProjectRequest(BaseModel):
@@ -394,6 +470,7 @@ async def get_file_content(project_id: uuid.UUID, path: str):
 class OptimizeFilesRequest(BaseModel):
     """Request model for file optimization."""
     files: List[str] = Field(..., description="List of file paths to optimize")
+    custom_instructions: Optional[str] = Field(default="", description="Optional custom optimization instructions from user")
 
 
 class OptimizedFileResult(BaseModel):
@@ -469,13 +546,28 @@ async def optimize_project_files(
                 ))
                 continue
             
-            # Build optimization prompt
-            prompt = f"""Optimize the following code. Improve:
+            # Build optimization prompt with custom instructions if provided
+            base_instructions = """Optimize the following code. Improve:
 - Code quality and readability
 - Performance and efficiency
 - Error handling
 - Documentation and comments
-- Best practices
+- Best practices"""
+            
+            if request.custom_instructions and request.custom_instructions.strip():
+                prompt = f"""{base_instructions}
+
+ADDITIONAL USER REQUIREMENTS:
+{request.custom_instructions.strip()}
+
+File: {file_path}
+
+Code:
+{content}
+
+Return ONLY the optimized code without explanations."""
+            else:
+                prompt = f"""{base_instructions}
 
 File: {file_path}
 
@@ -488,7 +580,7 @@ Return ONLY the optimized code without explanations."""
             await GenerationLog.create(
                 project_id=project_id,
                 step="optimization",
-                message=f"Starting AI optimization for {file_path}"
+                message=f"Starting AI optimization for {file_path}" + (f" with custom instructions: {request.custom_instructions[:50]}..." if request.custom_instructions else "")
             )
             
             # Call AI optimizer
@@ -496,14 +588,66 @@ Return ONLY the optimized code without explanations."""
                 ai_optimizer = get_ai_optimizer()
                 optimized_content = await ai_optimizer.optimize_code(prompt)
                 
-                # Write optimized content back to file
-                file_full_path = base_dir / file_path
-                file_full_path.write_text(optimized_content, encoding='utf-8')
+                # Detect if language has changed based on content
+                detected_language = detect_language_from_code(optimized_content)
+                original_extension = Path(file_path).suffix
+                new_extension = get_extension_for_language(detected_language) if detected_language else original_extension
                 
-                # Update or create ProjectFile record
+                # Debug logging
+                print(f"File: {file_path}")
+                print(f"Detected language: {detected_language}")
+                print(f"Original extension: {original_extension}")
+                print(f"New extension: {new_extension}")
+                print(f"Code sample (first 200 chars): {optimized_content[:200]}")
+                
+                # Determine if file needs to be renamed
+                new_file_path = file_path
+                file_was_renamed = False
+                
+                if new_extension and new_extension != original_extension:
+                    # Create new filename with correct extension
+                    path_obj = Path(file_path)
+                    new_file_path = str(path_obj.with_suffix(new_extension))
+                    
+                    print(f"Renaming: {file_path} -> {new_file_path}")
+                    
+                    # Get full paths
+                    old_full_path = base_dir / file_path
+                    new_full_path = base_dir / new_file_path
+                    
+                    # Write to new file
+                    new_full_path.write_text(optimized_content, encoding='utf-8')
+                    
+                    # Delete old file if it exists and is different
+                    if old_full_path.exists() and old_full_path != new_full_path:
+                        old_full_path.unlink()
+                        file_was_renamed = True
+                        
+                        await GenerationLog.create(
+                            project_id=project_id,
+                            step="optimization",
+                            message=f"Renamed {file_path} to {new_file_path} (detected language: {detected_language})"
+                        )
+                else:
+                    # Write optimized content back to same file
+                    file_full_path = base_dir / file_path
+                    file_full_path.write_text(optimized_content, encoding='utf-8')
+                
+                # Update or create ProjectFile record with new path
+                final_path = new_file_path if file_was_renamed else file_path
+                
+                # If file was renamed, delete old record and create new one
+                if file_was_renamed:
+                    old_project_file = await ProjectFile.filter(
+                        project_id=project_id,
+                        path=file_path
+                    ).first()
+                    if old_project_file:
+                        await old_project_file.delete()
+                
                 project_file = await ProjectFile.filter(
                     project_id=project_id,
-                    path=file_path
+                    path=final_path
                 ).first()
                 
                 if project_file:
@@ -511,18 +655,18 @@ Return ONLY the optimized code without explanations."""
                     await project_file.save()
                 else:
                     # Determine file type from path
-                    if "backend" in file_path:
+                    if "backend" in final_path:
                         file_type = "backend"
-                    elif "frontend" in file_path:
+                    elif "frontend" in final_path:
                         file_type = "frontend"
-                    elif "database" in file_path:
+                    elif "database" in final_path:
                         file_type = "database"
                     else:
                         file_type = "docs"
                     
                     await ProjectFile.create(
                         project_id=project_id,
-                        path=file_path,
+                        path=final_path,
                         file_type=file_type,
                         is_optimized=True
                     )
@@ -531,13 +675,13 @@ Return ONLY the optimized code without explanations."""
                 await GenerationLog.create(
                     project_id=project_id,
                     step="optimization",
-                    message=f"Successfully optimized {file_path}"
+                    message=f"Successfully optimized {final_path}"
                 )
                 
                 results.append(OptimizedFileResult(
-                    path=file_path,
+                    path=final_path,
                     success=True,
-                    message="File optimized successfully"
+                    message=f"File optimized successfully" + (f" and renamed to {new_file_path}" if file_was_renamed else "")
                 ))
             
             except Exception as ai_error:

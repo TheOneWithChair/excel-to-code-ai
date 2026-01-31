@@ -181,6 +181,7 @@ class ApiClient {
   async optimizeFiles(
     projectId: string,
     files: string[],
+    customInstructions?: string,
   ): Promise<OptimizeFilesResponse> {
     const response = await fetch(
       `${this.baseUrl}/projects/${projectId}/optimize`,
@@ -189,7 +190,10 @@ class ApiClient {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ files }),
+        body: JSON.stringify({
+          files,
+          custom_instructions: customInstructions || "",
+        }),
       },
     );
 

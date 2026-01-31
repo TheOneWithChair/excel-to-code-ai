@@ -374,6 +374,7 @@ export default function ProjectFilesPage({ params }: ProjectFilesPageProps) {
     const [isOptimizing, setIsOptimizing] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [optimizationResults, setOptimizationResults] = useState<string | null>(null);
+    const [customInstructions, setCustomInstructions] = useState<string>('');
 
     // Fetch file tree on mount
     useEffect(() => {
@@ -424,6 +425,55 @@ export default function ProjectFilesPage({ params }: ProjectFilesPageProps) {
         setSelectedFiles(newSelected);
     };
 
+    // Collect all file paths from a folder recursively
+    const collectFilesFromFolder = (node: FileTreeNode, parentPath: string = ''): string[] => {
+        const fullPath = parentPath ? `${parentPath}/${node.name}` : node.name;
+        const files: string[] = [];
+
+        if (node.type === 'file') {
+            files.push(fullPath);
+        }
+
+        if (node.children) {
+            for (const child of node.children) {
+                files.push(...collectFilesFromFolder(child, fullPath));
+            }
+        }
+
+        return files;
+    };
+
+    // Toggle folder selection (selects/deselects all files within)
+    const handleFolderSelect = (node: FileTreeNode, parentPath: string, checked: boolean) => {
+        const fullPath = parentPath ? `${parentPath}/${node.name}` : node.name;
+        const filesInFolder = collectFilesFromFolder(node, parentPath);
+
+        const newSelected = new Set(selectedFiles);
+
+        if (checked) {
+            // Add all files in folder
+            filesInFolder.forEach(file => newSelected.add(file));
+        } else {
+            // Remove all files in folder
+            filesInFolder.forEach(file => newSelected.delete(file));
+        }
+
+        setSelectedFiles(newSelected);
+    };
+
+    // Check if folder is fully selected, partially selected, or not selected
+    const getFolderSelectionState = (node: FileTreeNode, parentPath: string): 'all' | 'some' | 'none' => {
+        const filesInFolder = collectFilesFromFolder(node, parentPath);
+
+        if (filesInFolder.length === 0) return 'none';
+
+        const selectedCount = filesInFolder.filter(file => selectedFiles.has(file)).length;
+
+        if (selectedCount === 0) return 'none';
+        if (selectedCount === filesInFolder.length) return 'all';
+        return 'some';
+    };
+
     // Optimize selected files
     const handleOptimize = async () => {
         if (selectedFiles.size === 0) {
@@ -438,7 +488,8 @@ export default function ProjectFilesPage({ params }: ProjectFilesPageProps) {
 
             const files = Array.from(selectedFiles);
             console.log('Optimizing files:', files);
-            const response: OptimizeFilesResponse = await apiClient.optimizeFiles(id, files);
+            console.log('Custom instructions:', customInstructions);
+            const response: OptimizeFilesResponse = await apiClient.optimizeFiles(id, files, customInstructions);
             console.log('Optimization response:', response);
 
             // Check if response has optimized array
@@ -453,13 +504,17 @@ export default function ProjectFilesPage({ params }: ProjectFilesPageProps) {
 
             setOptimizationResults(results);
 
-            // Refresh file content if current file was optimized
-            if (selectedFile && selectedFiles.has(selectedFile)) {
-                const data: FileContentResponse = await apiClient.getFileContent(id, selectedFile);
-                setFileContent(data.content);
+            // Refresh file tree to pick up any renamed files
+            try {
+                const treeData = await apiClient.getFiles(id);
+                setFileTree(treeData);
+            } catch (treeErr) {
+                console.error('Error refreshing file tree:', treeErr);
             }
 
-            // Clear selection
+            // Clear current selection and file content since paths may have changed
+            setSelectedFile(null);
+            setFileContent('');
             setSelectedFiles(new Set());
         } catch (err) {
             console.error('Error optimizing files:', err);
@@ -478,21 +533,36 @@ export default function ProjectFilesPage({ params }: ProjectFilesPageProps) {
         const isSelected = selectedFiles.has(fullPath);
         const isCurrentFile = selectedFile === fullPath;
 
+        // For folders, determine selection state
+        const folderSelectionState = isFolder ? getFolderSelectionState(node, parentPath) : 'none';
+        const isFolderChecked = folderSelectionState === 'all';
+        const isFolderIndeterminate = folderSelectionState === 'some';
+
         return (
             <div key={fullPath} style={{ marginLeft: `${depth * 20}px` }}>
                 <div
                     className={`flex items-center gap-2 py-1.5 px-2 rounded ${isFile ? 'cursor-pointer hover:bg-gray-100' : ''
                         } ${isCurrentFile ? 'bg-blue-50' : ''}`}
                 >
-                    {isFile && (
-                        <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={(e) => handleFileSelect(fullPath, e.target.checked)}
-                            onClick={(e) => e.stopPropagation()}
-                            className="w-4 h-4"
-                        />
-                    )}
+                    {/* Checkbox for both files and folders */}
+                    <input
+                        type="checkbox"
+                        checked={isFile ? isSelected : isFolderChecked}
+                        ref={(el) => {
+                            if (el && isFolder && isFolderIndeterminate) {
+                                el.indeterminate = true;
+                            }
+                        }}
+                        onChange={(e) => {
+                            if (isFile) {
+                                handleFileSelect(fullPath, e.target.checked);
+                            } else if (isFolder) {
+                                handleFolderSelect(node, parentPath, e.target.checked);
+                            }
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-4 h-4"
+                    />
                     <div
                         className="flex items-center gap-2 flex-1"
                         onClick={() => isFile && handleFileClick(fullPath)}
@@ -577,20 +647,41 @@ export default function ProjectFilesPage({ params }: ProjectFilesPageProps) {
 
                 {/* Action Bar */}
                 <Card className="mb-6">
-                    <div className="flex items-center justify-between">
-                        <div className="text-sm text-gray-600">
-                            {selectedFiles.size > 0 ? (
-                                <span>{selectedFiles.size} file{selectedFiles.size > 1 ? 's' : ''} selected</span>
-                            ) : (
-                                <span>Select files to optimize</span>
-                            )}
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <div className="text-sm text-gray-600">
+                                {selectedFiles.size > 0 ? (
+                                    <span>{selectedFiles.size} file{selectedFiles.size > 1 ? 's' : ''} selected</span>
+                                ) : (
+                                    <span>Select files to optimize</span>
+                                )}
+                            </div>
+                            <Button
+                                onClick={handleOptimize}
+                                disabled={selectedFiles.size === 0 || isOptimizing}
+                            >
+                                {isOptimizing ? 'Optimizing...' : 'Optimize Selected'}
+                            </Button>
                         </div>
-                        <Button
-                            onClick={handleOptimize}
-                            disabled={selectedFiles.size === 0 || isOptimizing}
-                        >
-                            {isOptimizing ? 'Optimizing...' : 'Optimize Selected'}
-                        </Button>
+
+                        {/* Custom Instructions */}
+                        <div>
+                            <label htmlFor="custom-instructions" className="block text-sm font-medium text-gray-700 mb-2">
+                                Custom Optimization Instructions (Optional)
+                            </label>
+                            <textarea
+                                id="custom-instructions"
+                                value={customInstructions}
+                                onChange={(e) => setCustomInstructions(e.target.value)}
+                                placeholder="e.g., Add more error handling, improve performance, add TypeScript types, etc."
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                                rows={3}
+                                disabled={isOptimizing}
+                            />
+                            <p className="mt-1 text-xs text-gray-500">
+                                Provide specific improvements you want. If left empty, files will be optimized with general best practices.
+                            </p>
+                        </div>
                     </div>
                 </Card>
 
