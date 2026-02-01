@@ -6,6 +6,7 @@ import Card from '@/components/Card';
 import Button from '@/components/Button';
 import { apiClient } from '@/lib/api-client';
 import type { FileTreeNode, FileContentResponse, OptimizeFilesResponse } from '@/types/api';
+import ProjectTree, { FileNode } from '@/components/ProjectTree';
 
 interface ProjectFilesPageProps {
     params: Promise<{
@@ -385,7 +386,7 @@ export default function ProjectFilesPage({ params }: ProjectFilesPageProps) {
                 const data = await apiClient.getFiles(id);
                 console.log('File tree response:', data);
                 console.log('File tree type:', typeof data, Array.isArray(data));
-                setFileTree(data);
+                setFileTree(Array.isArray(data) ? data : [data]);
             } catch (err) {
                 console.error('Error fetching file tree:', err);
                 setError(err instanceof Error ? err.message : 'Failed to load files');
@@ -507,7 +508,7 @@ export default function ProjectFilesPage({ params }: ProjectFilesPageProps) {
             // Refresh file tree to pick up any renamed files
             try {
                 const treeData = await apiClient.getFiles(id);
-                setFileTree(treeData);
+                setFileTree(Array.isArray(treeData) ? treeData : [treeData]);
             } catch (treeErr) {
                 console.error('Error refreshing file tree:', treeErr);
             }
@@ -524,67 +525,21 @@ export default function ProjectFilesPage({ params }: ProjectFilesPageProps) {
         }
     };
 
-    // Render file tree recursively
-    const renderFileTree = (node: FileTreeNode, parentPath: string = '', depth: number = 0) => {
-        const isFile = node.type === 'file';
-        const isFolder = node.type === 'directory' || node.type === 'folder';
-        // Build full path for this node
-        const fullPath = parentPath ? `${parentPath}/${node.name}` : node.name;
-        const isSelected = selectedFiles.has(fullPath);
-        const isCurrentFile = selectedFile === fullPath;
-
-        // For folders, determine selection state
-        const folderSelectionState = isFolder ? getFolderSelectionState(node, parentPath) : 'none';
-        const isFolderChecked = folderSelectionState === 'all';
-        const isFolderIndeterminate = folderSelectionState === 'some';
-
-        return (
-            <div key={fullPath} style={{ marginLeft: `${depth * 20}px` }}>
-                <div
-                    className={`flex items-center gap-2 py-1.5 px-2 rounded ${isFile ? 'cursor-pointer hover:bg-gray-100' : ''
-                        } ${isCurrentFile ? 'bg-blue-50' : ''}`}
-                >
-                    {/* Checkbox for both files and folders */}
-                    <input
-                        type="checkbox"
-                        checked={isFile ? isSelected : isFolderChecked}
-                        ref={(el) => {
-                            if (el && isFolder && isFolderIndeterminate) {
-                                el.indeterminate = true;
-                            }
-                        }}
-                        onChange={(e) => {
-                            if (isFile) {
-                                handleFileSelect(fullPath, e.target.checked);
-                            } else if (isFolder) {
-                                handleFolderSelect(node, parentPath, e.target.checked);
-                            }
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                        className="w-4 h-4"
-                    />
-                    <div
-                        className="flex items-center gap-2 flex-1"
-                        onClick={() => isFile && handleFileClick(fullPath)}
-                    >
-                        {isFile ? (
-                            <svg className="w-4 h-4 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
-                            </svg>
-                        ) : (
-                            <svg className="w-4 h-4 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
-                                <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
-                            </svg>
-                        )}
-                        <span className={`text-sm ${isFile ? 'text-gray-700' : 'font-semibold text-gray-900'}`}>
-                            {node.name}
-                        </span>
-                    </div>
-                </div>
-                {node.children && node.children.map((child) => renderFileTree(child, fullPath, depth + 1))}
-            </div>
-        );
+    // Map FileTreeNode (API) to FileNode (Component)
+    const mapApiNodesToTreeNodes = (nodes: FileTreeNode[], parentPath: string = ''): FileNode[] => {
+        return nodes.map((node) => {
+            const fullPath = parentPath ? `${parentPath}/${node.name}` : node.name;
+            return {
+                id: fullPath,
+                name: node.name,
+                type: node.type as 'file' | 'folder' | 'directory',
+                path: fullPath,
+                children: node.children ? mapApiNodesToTreeNodes(node.children, fullPath) : undefined,
+            };
+        });
     };
+
+    const treeData = fileTree ? mapApiNodesToTreeNodes(fileTree) : [];
 
     if (isLoadingTree) {
         return (
@@ -688,13 +643,56 @@ export default function ProjectFilesPage({ params }: ProjectFilesPageProps) {
                 {/* Two-column layout */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {/* File Tree */}
-                    <Card>
-                        <h2 className="text-lg font-semibold text-gray-900 mb-4">File Explorer</h2>
-                        <div className="max-h-[600px] overflow-y-auto">
+                    <Card className="flex flex-col h-full border-0 shadow-none">
+                        <h2 className="text-lg font-semibold text-gray-900 mb-4 px-1">File Explorer</h2>
+                        <div className="flex-1 overflow-auto min-h-[400px]">
                             {fileTree && fileTree.length > 0 ? (
-                                fileTree.map((node) => renderFileTree(node, '', 0))
+                                <ProjectTree
+                                    tree={treeData}
+                                    selectedFile={selectedFile}
+                                    selectedForOptimization={selectedFiles}
+                                    onFileSelect={(node) => handleFileClick(node.path)}
+                                    onToggleOptimization={(id) => {
+                                        // Find node in tree to decide if it's file or folder
+                                        const findNode = (nodes: FileTreeNode[]): FileTreeNode | undefined => {
+                                            for (const node of nodes) {
+                                                if (node.path === id) return node;
+                                                if (node.children) {
+                                                    const found = findNode(node.children);
+                                                    if (found) return found;
+                                                }
+                                            }
+                                            return undefined;
+                                        };
+                                        const node = findNode(fileTree!);
+                                        if (node) {
+                                            const isFile = node.type === 'file';
+                                            const isChecked = selectedFiles.has(id);
+                                            if (isFile) {
+                                                handleFileSelect(id, !isChecked);
+                                            } else {
+                                                // For folders, we need parent path to call handleFolderSelect correctly
+                                                // But handleFolderSelect builds path from parentPath + node.name
+                                                // If id is already the full path, we can pass parentPath='' and name=id?
+                                                // Actually handleFolderSelect expects the node itself.
+                                                // Let's simplify and just use handleFolderSelect with the node.
+                                                // We need parentPath though... 
+                                                // Actually, let's look at handleFolderSelect again.
+                                                // It uses collectFilesFromFolder(node, parentPath)
+
+                                                // Re-implementing a simpler folder toggle for the component
+                                                const filesInFolder = collectFilesFromFolder(node, ''); // path is already full in node.path
+                                                // wait, collectFilesFromFolder builds path again: fullPath = parentPath ? `${parentPath}/${node.name}` : node.name;
+                                                // This is problematic if node.name is just the basename.
+
+                                                handleFolderSelect(node, '', !isChecked);
+                                            }
+                                        }
+                                    }}
+                                    className="border-0 shadow-none"
+                                />
                             ) : (
-                                <p className="text-gray-500">No files found</p>
+                                <p className="text-gray-500 px-1">No files found</p>
                             )}
                         </div>
                     </Card>

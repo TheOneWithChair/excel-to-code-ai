@@ -3,9 +3,9 @@
 import React, { useState } from 'react';
 
 export interface FileNode {
-    id: string;
+    id: string; // This can be the path from API
     name: string;
-    type: 'file' | 'folder';
+    type: 'file' | 'folder' | 'directory';
     path: string;
     children?: FileNode[];
     content?: string;
@@ -26,88 +26,90 @@ export default function ProjectTree({
     selectedForOptimization,
     onFileSelect,
     onToggleOptimization,
-    className = ''
+    className = '',
 }: ProjectTreeProps) {
     const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
-        new Set(tree.filter(n => n.type === 'folder').map(n => n.id))
+        new Set(tree.filter(n => n.type === 'folder' || n.type === 'directory').map(n => n.id))
     );
 
     const toggleFolder = (id: string) => {
         setExpandedFolders(prev => {
             const next = new Set(prev);
-            if (next.has(id)) {
-                next.delete(id);
-            } else {
-                next.add(id);
-            }
+            next.has(id) ? next.delete(id) : next.add(id);
             return next;
         });
     };
 
-    const renderNode = (node: FileNode, depth: number = 0) => {
+    const renderNode = (node: FileNode, depth = 0) => {
         const isExpanded = expandedFolders.has(node.id);
         const isSelected = selectedFile === node.id;
         const isChecked = selectedForOptimization.has(node.id);
 
         return (
             <div key={node.id}>
+                {/* Grid layout: checkbox column + content column */}
                 <div
-                    className={`flex items-center gap-2 px-3 py-1.5 hover:bg-gray-100 cursor-pointer ${isSelected ? 'bg-blue-50 border-l-2 border-blue-600' : ''
+                    className={`grid grid-cols-[24px_1fr] items-center h-7 pr-2 hover:bg-gray-50 cursor-pointer ${isSelected ? 'bg-blue-50' : ''
                         }`}
-                    style={{ paddingLeft: `${depth * 16 + 12}px` }}
                 >
-                    {/* Checkbox */}
-                    <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={(e) => {
-                            e.stopPropagation();
-                            onToggleOptimization(node.id);
-                        }}
-                        className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                    />
-
-                    {/* Folder Icon / Expand Toggle */}
-                    {node.type === 'folder' ? (
-                        <button
-                            onClick={(e) => {
+                    {/* Column 1: Checkbox (fixed position, no indentation) */}
+                    <div className="flex items-center justify-center">
+                        <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
                                 e.stopPropagation();
-                                toggleFolder(node.id);
+                                onToggleOptimization(node.id);
                             }}
-                            className="flex items-center gap-1 flex-1"
-                        >
-                            <svg
-                                className={`w-4 h-4 text-gray-500 transition-transform ${isExpanded ? 'rotate-90' : ''
-                                    }`}
-                                fill="currentColor"
-                                viewBox="0 0 20 20"
+                            className="w-4 h-4 cursor-pointer flex-shrink-0"
+                        />
+                    </div>
+
+                    {/* Column 2: Content area with indentation */}
+                    <div className="flex items-center min-w-0">
+                        {/* Indentation spacer - only affects content, not checkbox */}
+                        <div style={{ width: `${depth * 16}px` }} className="flex-shrink-0" />
+
+                        {/* Expand/Collapse Arrow */}
+                        {(node.type === 'folder' || node.type === 'directory') ? (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleFolder(node.id);
+                                }}
+                                className="w-4 h-4 mr-1.5 flex items-center justify-center flex-shrink-0"
                             >
-                                <path
-                                    fillRule="evenodd"
-                                    d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
-                                    clipRule="evenodd"
-                                />
-                            </svg>
+                                <svg
+                                    className={`w-3 h-3 text-gray-500 transition-transform ${isExpanded ? 'rotate-90' : ''
+                                        }`}
+                                    viewBox="0 0 20 20"
+                                    fill="currentColor"
+                                >
+                                    <path
+                                        fillRule="evenodd"
+                                        d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
+                                        clipRule="evenodd"
+                                    />
+                                </svg>
+                            </button>
+                        ) : (
+                            <div className="w-4 h-4 mr-1.5 flex-shrink-0" />
+                        )}
+
+                        {/* Folder/File Icon */}
+                        {(node.type === 'folder' || node.type === 'directory') ? (
                             <svg
-                                className="w-4 h-4 text-blue-500"
-                                fill="currentColor"
+                                className="w-4 h-4 text-blue-500 mr-1.5 flex-shrink-0"
                                 viewBox="0 0 20 20"
+                                fill="currentColor"
                             >
                                 <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
                             </svg>
-                            <span className="text-sm font-medium text-gray-700">
-                                {node.name}
-                            </span>
-                        </button>
-                    ) : (
-                        <button
-                            onClick={() => onFileSelect(node)}
-                            className="flex items-center gap-1 flex-1"
-                        >
+                        ) : (
                             <svg
-                                className="w-4 h-4 text-gray-400 ml-5"
-                                fill="currentColor"
+                                className="w-4 h-4 text-gray-400 mr-1.5 flex-shrink-0"
                                 viewBox="0 0 20 20"
+                                fill="currentColor"
                             >
                                 <path
                                     fillRule="evenodd"
@@ -115,32 +117,39 @@ export default function ProjectTree({
                                     clipRule="evenodd"
                                 />
                             </svg>
+                        )}
+
+                        {/* File/Folder Name */}
+                        <button
+                            onClick={() =>
+                                node.type === 'file' ? onFileSelect(node) : toggleFolder(node.id)
+                            }
+                            className="flex-1 text-left min-w-0"
+                        >
                             <span
-                                className={`text-sm ${isSelected
-                                    ? 'font-medium text-blue-700'
-                                    : 'text-gray-600'
+                                className={`text-sm truncate block ${isSelected ? 'font-medium text-blue-700' : 'text-gray-700'
                                     }`}
                             >
                                 {node.name}
                             </span>
                         </button>
-                    )}
+                    </div>
                 </div>
 
-                {/* Render children if folder is expanded */}
-                {node.type === 'folder' &&
+                {/* Children */}
+                {(node.type === 'folder' || node.type === 'directory') &&
                     isExpanded &&
-                    node.children?.map(child => renderNode(child, depth + 1))}
+                    node.children?.map((child) => renderNode(child, depth + 1))}
             </div>
         );
     };
 
     return (
-        <div className={`bg-white border border-gray-200 rounded-lg overflow-hidden ${className}`}>
-            <div className="p-3 border-b border-gray-200 bg-gray-50">
+        <div className={`bg-white border border-gray-200 rounded-lg ${className}`}>
+            <div className="px-3 py-2 border-b bg-gray-50">
                 <h3 className="text-sm font-semibold text-gray-900">Project Files</h3>
             </div>
-            <div className="overflow-y-auto max-h-150">
+            <div className="max-h-[600px] overflow-y-auto">
                 {tree.map(node => renderNode(node))}
             </div>
         </div>
