@@ -416,62 +416,62 @@ export default function ProjectFilesPage({ params }: ProjectFilesPageProps) {
     };
 
     // Toggle file selection
-    const handleFileSelect = (filePath: string, checked: boolean) => {
-        const newSelected = new Set(selectedFiles);
-        if (checked) {
-            newSelected.add(filePath);
-        } else {
-            newSelected.delete(filePath);
-        }
-        setSelectedFiles(newSelected);
+    const handleFileSelect = (id: string, checked: boolean) => {
+        setSelectedFiles(prev => {
+            const next = new Set(prev);
+            if (checked) {
+                next.add(id);
+            } else {
+                next.delete(id);
+            }
+            return next;
+        });
     };
 
-    // Collect all file paths from a folder recursively
-    const collectFilesFromFolder = (node: FileTreeNode, parentPath: string = ''): string[] => {
-        const fullPath = parentPath ? `${parentPath}/${node.name}` : node.name;
-        const files: string[] = [];
+    // Collect all mapped file IDs from a node recursively
+    const collectFilesFromNode = (node: FileNode): string[] => {
+        const ids: string[] = [];
 
         if (node.type === 'file') {
-            files.push(fullPath);
+            ids.push(node.id);
         }
 
         if (node.children) {
             for (const child of node.children) {
-                files.push(...collectFilesFromFolder(child, fullPath));
+                ids.push(...collectFilesFromNode(child));
             }
         }
 
-        return files;
+        return ids;
     };
 
     // Toggle folder selection (selects/deselects all files within)
-    const handleFolderSelect = (node: FileTreeNode, parentPath: string, checked: boolean) => {
-        const fullPath = parentPath ? `${parentPath}/${node.name}` : node.name;
-        const filesInFolder = collectFilesFromFolder(node, parentPath);
-
-        const newSelected = new Set(selectedFiles);
-
-        if (checked) {
-            // Add all files in folder
-            filesInFolder.forEach(file => newSelected.add(file));
-        } else {
-            // Remove all files in folder
-            filesInFolder.forEach(file => newSelected.delete(file));
-        }
-
-        setSelectedFiles(newSelected);
+    const handleFolderSelect = (node: FileNode, checked: boolean) => {
+        const fileIds = collectFilesFromNode(node);
+        setSelectedFiles(prev => {
+            const next = new Set(prev);
+            if (checked) {
+                fileIds.forEach(id => next.add(id));
+            } else {
+                fileIds.forEach(id => next.delete(id));
+            }
+            return next;
+        });
     };
 
-    // Check if folder is fully selected, partially selected, or not selected
-    const getFolderSelectionState = (node: FileTreeNode, parentPath: string): 'all' | 'some' | 'none' => {
-        const filesInFolder = collectFilesFromFolder(node, parentPath);
+    // Check if node is fully selected, partially selected, or not selected
+    const getNodeSelectionState = (node: FileNode): 'all' | 'some' | 'none' => {
+        if (node.type === 'file') {
+            return selectedFiles.has(node.id) ? 'all' : 'none';
+        }
 
-        if (filesInFolder.length === 0) return 'none';
+        const fileIds = collectFilesFromNode(node);
+        if (fileIds.length === 0) return 'none';
 
-        const selectedCount = filesInFolder.filter(file => selectedFiles.has(file)).length;
+        const selectedCount = fileIds.filter(id => selectedFiles.has(id)).length;
 
         if (selectedCount === 0) return 'none';
-        if (selectedCount === filesInFolder.length) return 'all';
+        if (selectedCount === fileIds.length) return 'all';
         return 'some';
     };
 
@@ -528,13 +528,13 @@ export default function ProjectFilesPage({ params }: ProjectFilesPageProps) {
     // Map FileTreeNode (API) to FileNode (Component)
     const mapApiNodesToTreeNodes = (nodes: FileTreeNode[], parentPath: string = ''): FileNode[] => {
         return nodes.map((node) => {
-            const fullPath = parentPath ? `${parentPath}/${node.name}` : node.name;
+            const currentPath = node.path || (parentPath ? `${parentPath}/${node.name}` : node.name);
             return {
-                id: fullPath,
+                id: currentPath,
                 name: node.name,
                 type: node.type as 'file' | 'folder' | 'directory',
-                path: fullPath,
-                children: node.children ? mapApiNodesToTreeNodes(node.children, fullPath) : undefined,
+                path: currentPath,
+                children: node.children ? mapApiNodesToTreeNodes(node.children, currentPath) : undefined,
             };
         });
     };
@@ -650,42 +650,62 @@ export default function ProjectFilesPage({ params }: ProjectFilesPageProps) {
                                 <ProjectTree
                                     tree={treeData}
                                     selectedFile={selectedFile}
-                                    selectedForOptimization={selectedFiles}
+                                    selectedForOptimization={(() => {
+                                        const displaySet = new Set(selectedFiles);
+                                        const addFolders = (nodes: FileNode[]) => {
+                                            nodes.forEach(node => {
+                                                if (node.type !== 'file') {
+                                                    const state = getNodeSelectionState(node);
+                                                    if (state === 'all') {
+                                                        displaySet.add(node.id);
+                                                    }
+                                                    if (node.children) addFolders(node.children);
+                                                }
+                                            });
+                                        };
+                                        addFolders(treeData);
+                                        return displaySet;
+                                    })()}
+                                    indeterminateFiles={(() => {
+                                        const displaySet = new Set<string>();
+                                        const addFolders = (nodes: FileNode[]) => {
+                                            nodes.forEach(node => {
+                                                if (node.type !== 'file') {
+                                                    const state = getNodeSelectionState(node);
+                                                    if (state === 'some') {
+                                                        displaySet.add(node.id);
+                                                    }
+                                                    if (node.children) addFolders(node.children);
+                                                }
+                                            });
+                                        };
+                                        addFolders(treeData);
+                                        return displaySet;
+                                    })()}
                                     onFileSelect={(node) => handleFileClick(node.path)}
                                     onToggleOptimization={(id) => {
-                                        // Find node in tree to decide if it's file or folder
-                                        const findNode = (nodes: FileTreeNode[]): FileTreeNode | undefined => {
+                                        // Find node in the MAPPED tree
+                                        const findNode = (nodes: FileNode[], targetId: string): FileNode | undefined => {
                                             for (const node of nodes) {
-                                                if (node.path === id) return node;
+                                                if (node.id === targetId) return node;
                                                 if (node.children) {
-                                                    const found = findNode(node.children);
+                                                    const found = findNode(node.children, targetId);
                                                     if (found) return found;
                                                 }
                                             }
                                             return undefined;
                                         };
-                                        const node = findNode(fileTree!);
+                                        const node = findNode(treeData, id);
                                         if (node) {
-                                            const isFile = node.type === 'file';
-                                            const isChecked = selectedFiles.has(id);
-                                            if (isFile) {
+                                            if (node.type === 'file') {
+                                                const isChecked = selectedFiles.has(id);
                                                 handleFileSelect(id, !isChecked);
                                             } else {
-                                                // For folders, we need parent path to call handleFolderSelect correctly
-                                                // But handleFolderSelect builds path from parentPath + node.name
-                                                // If id is already the full path, we can pass parentPath='' and name=id?
-                                                // Actually handleFolderSelect expects the node itself.
-                                                // Let's simplify and just use handleFolderSelect with the node.
-                                                // We need parentPath though... 
-                                                // Actually, let's look at handleFolderSelect again.
-                                                // It uses collectFilesFromFolder(node, parentPath)
-
-                                                // Re-implementing a simpler folder toggle for the component
-                                                const filesInFolder = collectFilesFromFolder(node, ''); // path is already full in node.path
-                                                // wait, collectFilesFromFolder builds path again: fullPath = parentPath ? `${parentPath}/${node.name}` : node.name;
-                                                // This is problematic if node.name is just the basename.
-
-                                                handleFolderSelect(node, '', !isChecked);
+                                                const state = getNodeSelectionState(node);
+                                                // If not all are selected (none or some), select all.
+                                                // Only if all are selected, deselect all.
+                                                const shouldCheck = state !== 'all';
+                                                handleFolderSelect(node, shouldCheck);
                                             }
                                         }
                                     }}

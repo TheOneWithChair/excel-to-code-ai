@@ -40,26 +40,35 @@ export default function ProjectTree({
         });
     };
 
-    const renderNode = (node: FileNode, depth = 0) => {
+    const renderNode = (node: FileNode, depth = 0, index = 0) => {
         const isExpanded = expandedFolders.has(node.id);
         const isSelected = selectedFile === node.id;
         const isChecked = selectedForOptimization.has(node.id);
 
         return (
-            <div key={node.id}>
+            <div key={node.id || `${depth}-${index}`}>
                 {/* Grid layout: checkbox column + content column */}
                 <div
                     className={`grid grid-cols-[24px_1fr] items-center h-7 pr-2 hover:bg-gray-50 cursor-pointer ${isSelected ? 'bg-blue-50' : ''
                         }`}
+                    onClick={() =>
+                        node.type === 'file' ? onFileSelect(node) : toggleFolder(node.id)
+                    }
                 >
                     {/* Column 1: Checkbox (fixed position, no indentation) */}
-                    <div className="flex items-center justify-center">
+                    <div
+                        className="flex items-center justify-center h-full hover:bg-gray-100 transition-colors"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleOptimization(node.id);
+                        }}
+                    >
                         <input
                             type="checkbox"
                             checked={isChecked}
                             onChange={(e) => {
+                                // Handled by parent div's onClick
                                 e.stopPropagation();
-                                onToggleOptimization(node.id);
                             }}
                             className="w-4 h-4 cursor-pointer flex-shrink-0"
                         />
@@ -120,26 +129,21 @@ export default function ProjectTree({
                         )}
 
                         {/* File/Folder Name */}
-                        <button
-                            onClick={() =>
-                                node.type === 'file' ? onFileSelect(node) : toggleFolder(node.id)
-                            }
-                            className="flex-1 text-left min-w-0"
-                        >
+                        <div className="flex-1 text-left min-w-0">
                             <span
                                 className={`text-sm truncate block ${isSelected ? 'font-medium text-blue-700' : 'text-gray-700'
                                     }`}
                             >
                                 {node.name}
                             </span>
-                        </button>
+                        </div>
                     </div>
                 </div>
 
                 {/* Children */}
                 {(node.type === 'folder' || node.type === 'directory') &&
                     isExpanded &&
-                    node.children?.map((child) => renderNode(child, depth + 1))}
+                    node.children?.map((child, i) => renderNode(child, depth + 1, i))}
             </div>
         );
     };
@@ -150,7 +154,7 @@ export default function ProjectTree({
                 <h3 className="text-sm font-semibold text-gray-900">Project Files</h3>
             </div>
             <div className="max-h-[600px] overflow-y-auto">
-                {tree.map(node => renderNode(node))}
+                {tree.map((node, i) => renderNode(node, 0, i))}
             </div>
         </div>
     );
