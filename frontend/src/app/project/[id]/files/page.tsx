@@ -666,44 +666,28 @@ export default function ProjectFilesPage({ params }: ProjectFilesPageProps) {
                                         addFolders(treeData);
                                         return displaySet;
                                     })()}
-                                    indeterminateFiles={(() => {
-                                        const displaySet = new Set<string>();
-                                        const addFolders = (nodes: FileNode[]) => {
-                                            nodes.forEach(node => {
-                                                if (node.type !== 'file') {
-                                                    const state = getNodeSelectionState(node);
-                                                    if (state === 'some') {
-                                                        displaySet.add(node.id);
-                                                    }
-                                                    if (node.children) addFolders(node.children);
-                                                }
-                                            });
-                                        };
-                                        addFolders(treeData);
-                                        return displaySet;
-                                    })()}
                                     onFileSelect={(node) => handleFileClick(node.path)}
                                     onToggleOptimization={(id) => {
-                                        // Find node in the MAPPED tree
-                                        const findNode = (nodes: FileNode[], targetId: string): FileNode | undefined => {
+                                        // Find node in the MAPPED tree (treeData)
+                                        // This tree already has correctly constructed currentPath/id
+                                        const findInTree = (nodes: FileNode[], targetId: string): FileNode | undefined => {
                                             for (const node of nodes) {
                                                 if (node.id === targetId) return node;
                                                 if (node.children) {
-                                                    const found = findNode(node.children, targetId);
+                                                    const found = findInTree(node.children, targetId);
                                                     if (found) return found;
                                                 }
                                             }
                                             return undefined;
                                         };
-                                        const node = findNode(treeData, id);
+
+                                        const node = findInTree(treeData, id);
                                         if (node) {
                                             if (node.type === 'file') {
                                                 const isChecked = selectedFiles.has(id);
                                                 handleFileSelect(id, !isChecked);
                                             } else {
                                                 const state = getNodeSelectionState(node);
-                                                // If not all are selected (none or some), select all.
-                                                // Only if all are selected, deselect all.
                                                 const shouldCheck = state !== 'all';
                                                 handleFolderSelect(node, shouldCheck);
                                             }

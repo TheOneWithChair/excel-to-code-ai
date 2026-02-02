@@ -198,8 +198,9 @@ class ApiClient {
     );
 
     if (!response.ok) {
-      const error: ApiError = await response.json();
-      throw new Error(error.detail || "Failed to optimize files");
+      const error: any = await response.json();
+      const detail = typeof error.detail === 'object' ? JSON.stringify(error.detail) : error.detail;
+      throw new Error(detail || "Failed to optimize files");
     }
 
     return response.json();

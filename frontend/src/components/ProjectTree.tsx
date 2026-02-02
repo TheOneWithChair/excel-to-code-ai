@@ -23,7 +23,7 @@ interface ProjectTreeProps {
 export default function ProjectTree({
     tree,
     selectedFile,
-    selectedForOptimization,
+    selectedForOptimization = new Set(),
     onFileSelect,
     onToggleOptimization,
     className = '',
